@@ -320,15 +320,14 @@ def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_
         if not job.front_path:
             raise RuntimeError("Missing front_path and pdf_path.")
 
-        waitForFileReady(job.front_path)
-        front_image = Image.open(job.front_path)
-
+        # Close file handles immediately to avoid WinError 32 on move/rmtree.
+        with Image.open(job.front_path) as image_handle:
+            front_image = image_handle.convert("RGB").copy()
         pages = [front_image]
 
         if job.back_path:
-            waitForFileReady(job.back_path)
-            back_image = Image.open(job.back_path)
-
+            with Image.open(job.back_path) as image_handle:
+                back_image = image_handle.convert("RGB").copy()
             if job.duplex in ("auto", "true"):
                 pages = [front_image, back_image]
 
