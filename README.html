@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guia de Setup — Card Kiosk + Hotfolder Printer (Windows 11 + Evolis Dualys)</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#0f1b33;
+      --panel2:#0b162c;
+      --text:#e7eefc;
+      --muted:#a9b7d3;
+      --line:rgba(255,255,255,.10);
+      --accent:#7dd3fc;
+      --accent2:#a78bfa;
+      --good:#34d399;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      --code_bg:#061022;
+      --code_line:rgba(255,255,255,.08);
+      --shadow: 0 12px 40px rgba(0,0,0,.35);
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      background: radial-gradient(1400px 900px at 20% 10%, rgba(125,211,252,.15), transparent 60%),
+                  radial-gradient(1000px 800px at 80% 25%, rgba(167,139,250,.12), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+      line-height:1.55;
+    }
+    a{color:var(--accent); text-decoration:none}
+    a:hover{text-decoration:underline}
+    .container{
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 18px 60px;
+    }
+    .header{
+      padding: 26px 22px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(15,27,51,.85), rgba(11,18,32,.6));
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .title{
+      font-size: clamp(24px, 3vw, 34px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin: 0 0 10px;
+    }
+    .subtitle{
+      margin:0;
+      color:var(--muted);
+      font-size: 15px;
+      max-width: 80ch;
+    }
+    .badges{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top: 14px;
+    }
+    .badge{
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      color: var(--muted);
+    }
+    .layout{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+    @media (min-width: 980px){
+      .layout{ grid-template-columns: 320px 1fr; align-items:start; }
+      .toc{ position: sticky; top: 18px; }
+    }
+    .panel{
+      border: 1px solid var(--line);
+      background: rgba(15,27,51,.60);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .panel_header{
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+    }
+    .panel_title{
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin:0;
+    }
+    .panel_body{
+      padding: 14px 16px;
+    }
+    .toc a{
+      display:block;
+      padding: 10px 10px;
+      border-radius: 10px;
+      color: var(--text);
+      border: 1px solid transparent;
+    }
+    .toc a small{ color: var(--muted); display:block; margin-top: 2px; }
+    .toc a:hover{
+      border-color: var(--line);
+      background: rgba(255,255,255,.04);
+      text-decoration:none;
+    }
+    .toc .note{
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--line);
+    }
+    h2{
+      margin: 22px 0 10px;
+      font-size: 20px;
+      letter-spacing:-.01em;
+    }
+    h3{
+      margin: 18px 0 8px;
+      font-size: 16px;
+      color: var(--text);
+    }
+    p{ margin: 10px 0; color: var(--text); }
+    .muted{ color: var(--muted); }
+    .divider{
+      height:1px;
+      background: var(--line);
+      margin: 16px 0;
+    }
+    .callout{
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-left-width: 4px;
+      border-radius: 14px;
+      padding: 12px 12px;
+      margin: 12px 0;
+    }
+    .callout strong{ display:block; margin-bottom: 4px; }
+    .callout.good{ border-left-color: var(--good); }
+    .callout.warn{ border-left-color: var(--warn); }
+    .callout.bad{ border-left-color: var(--bad); }
+    ul{ margin: 8px 0 10px 18px; color: var(--text); }
+    li{ margin: 6px 0; }
+    .steps{
+      counter-reset: step;
+      list-style: none;
+      padding-left: 0;
+      margin: 10px 0;
+    }
+    .steps li{
+      counter-increment: step;
+      padding: 10px 12px 10px 48px;
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      margin: 10px 0;
+    }
+    .steps li::before{
+      content: counter(step);
+      position: absolute;
+      left: 12px;
+      top: 10px;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight: 800;
+      background: rgba(125,211,252,.18);
+      border: 1px solid rgba(125,211,252,.35);
+      color: var(--text);
+    }
+    .code_block{
+      margin: 10px 0 14px;
+      border: 1px solid var(--code_line);
+      border-radius: 14px;
+      overflow:hidden;
+      background: var(--code_bg);
+    }
+    .code_header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--code_line);
+      background: rgba(255,255,255,.03);
+    }
+    .code_label{
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+    .copy_button{
+      border: 1px solid var(--code_line);
+      background: rgba(255,255,255,.04);
+      color: var(--text);
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      cursor:pointer;
+    }
+    .copy_button:hover{ background: rgba(255,255,255,.08); }
+    pre{
+      margin:0;
+      padding: 12px;
+      overflow:auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: #dbeafe;
+    }
+    code{ font-family: inherit; }
+    .grid_two{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 760px){
+      .grid_two{ grid-template-columns: 1fr 1fr; }
+    }
+    .checklist{
+      list-style:none;
+      padding-left: 0;
+      margin: 12px 0;
+    }
+    .checklist li{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      margin: 10px 0;
+    }
+    .check{
+      width: 18px;
+      height: 18px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.05);
+      flex: none;
+      margin-top: 2px;
+    }
+    .footer{
+      margin-top: 18px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.03);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .small{ font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="title">Guia de Setup — Card Kiosk + Hotfolder Printer</h1>
+      <p class="subtitle">
+        Windows 11 + Evolis Dualys • Foto no navegador → job no hotfolder → automatizador imprime.
+        Este guia é focado em você conseguir colocar o fluxo de pé e depurar rápido quando algo der errado.
+      </p>
+      <div class="badges">
+        <span class="badge">Hotfolder: <b>C:\card_hotfolder\in</b></span>
+        <span class="badge">Webapp: <b>PHP + JS + Tailwind (CDN)</b></span>
+        <span class="badge">Automatizador: <b>Python (pywin32)</b></span>
+      </div>
+      <div class="callout warn" style="margin-top:14px;">
+        <strong>Importante</strong>
+        A Dualys é antiga. Se algo “misteriosamente” não funcionar no Windows 11, quase sempre é driver/configuração de spooler/permissão.
+        O webapp só cria jobs; quem decide CR80/duplex/borda é principalmente o driver.
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- TOC -->
+      <div class="panel toc">
+        <div class="panel_header">
+          <p class="panel_title">Sumário</p>
+        </div>
+        <div class="panel_body">
+          <a href="#sec0">0) Pré-requisitos<small>O que instalar antes de começar</small></a>
+          <a href="#sec1">1) Impressora no Windows<small>Nome exato, teste de impressão e preferências</small></a>
+          <a href="#sec2">2) Pastas do hotfolder<small>Estrutura padrão em C:\</small></a>
+          <a href="#sec3">3) Dependências do automatizador<small>Python + pacotes</small></a>
+          <a href="#sec4">4) Rodar o automatizador<small>Execução manual + logs</small></a>
+          <a href="#sec5">5) Testes sem webapp<small>Imagem simples + job com manifest</small></a>
+          <a href="#sec6">6) Subir o webapp<small>Config + servidor PHP</small></a>
+          <a href="#sec7">7) Teste ponta a ponta<small>Web → hotfolder → impressão</small></a>
+          <a href="#sec8">8) Rodar como serviço<small>Task Scheduler (recomendado)</small></a>
+          <a href="#sec9">9) Permissões<small>Erro #1 (IIS/Apache/serviço)</small></a>
+          <a href="#sec10">10) Diagnóstico rápido<small>O que olhar quando falha</small></a>
+          <a href="#sec11">11) Checklist final<small>Pronto para produção</small></a>
+          <a href="#sec12">12) Coletar info para suporte<small>O que enviar quando pedir ajuda</small></a>
+
+          <div class="note">
+            Dica: use os botões “Copiar” nos blocos de comando para colar direto no PowerShell.
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTENT -->
+      <div class="panel">
+        <div class="panel_header">
+          <p class="panel_title">Instruções</p>
+          <span class="small">Versão: 1.0</span>
+        </div>
+        <div class="panel_body">
+
+          <section id="sec0">
+            <h2>0) Pré-requisitos</h2>
+            <div class="grid_two">
+              <div class="callout good">
+                <strong>Obrigatório</strong>
+                <ul>
+                  <li>Windows 11</li>
+                  <li>Evolis Dualys conectada e reconhecida</li>
+                  <li>Python 3.10+ (recomendado 3.11)</li>
+                  <li>PHP 8+ (para subir o webapp local)</li>
+                  <li>Chrome/Edge (para câmera)</li>
+                </ul>
+              </div>
+              <div class="callout warn">
+                <strong>Recomendado</strong>
+                <ul>
+                  <li>Rodar tudo primeiro “no seu usuário” (sem IIS) para isolar problema de permissão.</li>
+                  <li>Só depois mover para serviço/IIS.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec1">
+            <h2>1) Conferir a impressora no Windows</h2>
+
+            <ol class="steps">
+              <li>
+                Abra <b>Configurações → Bluetooth e dispositivos → Impressoras e scanners</b>.
+              </li>
+              <li>
+                Confirme que a Dualys aparece e imprima uma <b>página de teste</b> (ou um job simples).
+              </li>
+              <li>
+                Anote o <b>nome exato</b> como aparece no Windows. Ele precisa bater com o que o automatizador usa.
+              </li>
+            </ol>
+
+            <div class="callout warn">
+              <strong>Preferências do driver (ajuste 1x e esquece)</strong>
+              <ul>
+                <li><b>Tamanho:</b> CR80 / ID-1 (85.6 × 53.98 mm)</li>
+                <li><b>Orientação:</b> a que corresponde ao layout da sua arte</li>
+                <li><b>Duplex:</b> habilite se você quer frente e verso real</li>
+                <li><b>Borda/edge-to-edge:</b> habilite se o driver oferecer</li>
+              </ul>
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec2">
+            <h2>2) Criar pastas do hotfolder</h2>
+            <p class="muted">Estrutura padrão usada por este fluxo:</p>
+
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">PowerShell</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>New-Item -ItemType Directory -Force -Path `
+  C:\card_hotfolder\in, `
+  C:\card_hotfolder\done, `
+  C:\card_hotfolder\error, `
+  C:\card_hotfolder\logs | Out-Null</code></pre>
+            </div>
+
+            <div class="callout good">
+              <strong>O que cada pasta significa</strong>
+              <ul>
+                <li><b>in</b>: entrada (o webapp cria jobs aqui)</li>
+                <li><b>done</b>: processados com sucesso</li>
+                <li><b>error</b>: falhas (olhar logs + conteúdo do job)</li>
+                <li><b>logs</b>: log do automatizador</li>
+              </ul>
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec3">
+            <h2>3) Instalar dependências do automatizador (Python)</h2>
+
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">PowerShell</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>py -m pip install --upgrade pip
+py -m pip install pillow pywin32 pymupdf</code></pre>
+            </div>
+
+            <ul>
+              <li><b>pillow</b>: preparar imagens (cortar/encaixar)</li>
+              <li><b>pywin32</b>: imprimir via Windows GDI/DC</li>
+              <li><b>pymupdf</b>: aceitar PDFs (se você usar PDF)</li>
+            </ul>
+
+            <div class="callout warn">
+              <strong>Se você não vai imprimir PDF</strong>
+              Pode omitir <b>pymupdf</b>, mas qualquer PDF enviado cairá em <b>error</b>.
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec4">
+            <h2>4) Rodar o automatizador (hotfolder watcher)</h2>
+
+            <h3>4.1) Salvar o script</h3>
+            <p>Salve o script do automatizador em um caminho fixo, por exemplo:</p>
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">Caminho sugerido</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>C:\card_hotfolder\card_hotfolder_printer.py</code></pre>
+            </div>
+
+            <h3>4.2) Descobrir o nome exato da impressora (opcional)</h3>
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">PowerShell</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>py C:\card_hotfolder\card_hotfolder_printer.py --list_printers</code></pre>
+            </div>
+
+            <h3>4.3) Rodar manualmente (teste)</h3>
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">PowerShell</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>py C:\card_hotfolder\card_hotfolder_printer.py --root C:\card_hotfolder --printer "Evolis Dualys"</code></pre>
+            </div>
+
+            <div class="callout good">
+              <strong>O que você deve ver</strong>
+              Logs no terminal indicando que está monitorando <b>C:\card_hotfolder\in</b>.
+            </div>
+
+            <div class="callout warn">
+              <strong>Regra de ouro</strong>
+              Primeiro rode manualmente e faça todos os testes. Só depois transforme em serviço.
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec5">
+            <h2>5) Testes do automatizador sem webapp (recomendado)</h2>
+
+            <h3>5.1) Teste com uma imagem (frente apenas)</h3>
+            <ol class="steps">
+              <li>Copie um arquivo <b>.png</b> ou <b>.jpg</b> para <b>C:\card_hotfolder\in</b>.</li>
+              <li>O automatizador deve imprimir e mover o arquivo para <b>done</b>.</li>
+            </ol>
+
+            <div class="callout bad">
+              <strong>Se cair em error</strong>
+              Abra <b>C:\card_hotfolder\logs\hotfolder.log</b> e leia o motivo exato.
+            </div>
+
+            <h3>5.2) Teste com job completo (pasta + manifest) para frente e verso</h3>
+
+            <p>Crie a pasta:</p>
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">Caminho</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>C:\card_hotfolder\in\job_teste_01\</code></pre>
+            </div>
+
+            <p>Coloque dentro:</p>
+            <ul>
+              <li><code>front.jpg</code></li>
+              <li><code>back.jpg</code></li>
+              <li><code>manifest.json</code></li>
+            </ul>
+
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">manifest.json</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>{
+  "printer_name": "Evolis Dualys",
+  "copies": 1,
+  "duplex": "true",
+  "fit_mode": "fill",
+  "rotate_degrees": 0,
+  "card_size_mm": { "width_mm": 85.6, "height_mm": 53.98 },
+  "front_file": "front.jpg",
+  "back_file": "back.jpg"
+}</code></pre>
+            </div>
+
+            <div class="callout warn">
+              <strong>Duplex pode virar “dois cartões”</strong>
+              Se o driver não estiver realmente configurado como duplex, 2 páginas podem imprimir como 2 cartões separados.
+              Ajuste isso no driver.
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec6">
+            <h2>6) Subir o webapp (kiosk)</h2>
+
+            <h3>6.1) Ajustar o arquivo de config</h3>
+            <p>Edite <code>src/config.php</code> e confirme:</p>
+            <ul>
+              <li><code>hotfolder_in_path</code> = <b>C:\\card_hotfolder\\in</b></li>
+              <li><code>default_printer_name</code> = <b>nome exato</b> da impressora no Windows</li>
+            </ul>
+
+            <h3>6.2) Subir com servidor embutido do PHP</h3>
+
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">PowerShell</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>cd C:\caminho\card_kiosk_webapp
+php -S 0.0.0.0:8080 -t public</code></pre>
+            </div>
+
+            <p>Abra:</p>
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">URL</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>http://localhost:8080</code></pre>
+            </div>
+
+            <div class="callout good">
+              <strong>Health check</strong>
+              Na tela inicial o webapp mostra se o hotfolder está OK (é um teste de escrita no caminho configurado).
+            </div>
+
+            <div class="callout warn">
+              <strong>Câmera</strong>
+              Garanta permissão do navegador para câmera. Em kiosk, use Chrome/Edge e dê permissão para <b>localhost</b>.
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec7">
+            <h2>7) Teste ponta a ponta (webapp → hotfolder → impressora)</h2>
+
+            <ol class="steps">
+              <li>Deixe o automatizador rodando em um terminal.</li>
+              <li>Abra o webapp (<code>http://localhost:8080</code>).</li>
+              <li>Faça um teste <b>Só frente</b> (captura 1 foto).</li>
+              <li>Depois teste <b>Frente e verso</b> (captura 2 fotos).</li>
+            </ol>
+
+            <div class="callout good">
+              <strong>Resultado esperado</strong>
+              <ul>
+                <li>Webapp cria uma pasta de job dentro de <b>C:\card_hotfolder\in</b></li>
+                <li>Automatizador processa e move para <b>done</b></li>
+                <li>Impressora imprime (simples ou duplex conforme driver)</li>
+              </ul>
+            </div>
+
+            <div class="callout bad">
+              <strong>Se “trava” no meio</strong>
+              <ul>
+                <li>Veja <b>C:\card_hotfolder\logs\hotfolder.log</b></li>
+                <li>Veja o job em <b>error</b> (se foi movido)</li>
+                <li>Confirme se a impressora está Online e não em pausa</li>
+              </ul>
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec8">
+            <h2>8) Rodar como serviço (produção)</h2>
+
+            <div class="callout warn">
+              <strong>Recomendação prática</strong>
+              Use o <b>Agendador de Tarefas</b> (Task Scheduler). É simples, confiável e evita dor de cabeça com serviços customizados.
+            </div>
+
+            <h3>8.1) Automatizador via Task Scheduler</h3>
+            <ol class="steps">
+              <li>Abra <b>Task Scheduler</b> → <b>Create Task…</b></li>
+              <li><b>Triggers</b>: At startup (ou At log on)</li>
+              <li><b>Actions</b>: Start a program</li>
+              <li>Program/script: <code>py</code></li>
+              <li>Arguments (ajuste o nome da impressora):</li>
+            </ol>
+
+            <div class="code_block" data_code_block>
+              <div class="code_header">
+                <span class="code_label">Arguments</span>
+                <button class="copy_button" type="button" data_copy_button>Copiar</button>
+              </div>
+              <pre><code>C:\card_hotfolder\card_hotfolder_printer.py --root C:\card_hotfolder --printer "Evolis Dualys"</code></pre>
+            </div>
+
+            <div class="callout warn">
+              <strong>Permissões de serviço</strong>
+              Se a tarefa rodar com outro usuário, esse usuário precisa:
+              <ul>
+                <li>Escrever em <b>C:\card_hotfolder\*</b></li>
+                <li>Ter acesso à impressora (spooler)</li>
+              </ul>
+            </div>
+
+            <h3>8.2) Webapp “em produção”</h3>
+            <ul>
+              <li>Para kiosk local, <code>php -S</code> costuma bastar.</li>
+              <li>Para algo estável: IIS + PHP (FastCGI) ou Apache.</li>
+              <li>Se usar IIS/Apache, vá direto para a seção <a href="#sec9">Permissões</a>.</li>
+            </ul>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec9">
+            <h2>9) Permissões (causa #1 de falha)</h2>
+
+            <div class="grid_two">
+              <div class="callout good">
+                <strong>Cenário A: tudo rodando no seu usuário</strong>
+                Normalmente funciona sem mexer em ACL.
+              </div>
+              <div class="callout bad">
+                <strong>Cenário B: IIS/Apache/serviço</strong>
+                O webserver pode não conseguir escrever em <b>C:\card_hotfolder\in</b>.
+              </div>
+            </div>
+
+            <h3>9.1) Como corrigir (modo GUI)</h3>
+            <ol class="steps">
+              <li>Clique direito em <b>C:\card_hotfolder</b> → <b>Propriedades</b> → <b>Segurança</b></li>
+              <li>Edite e adicione o usuário/grupo do serviço</li>
+              <li>Permissão: <b>Modify</b> (Leitura + Escrita + Deletar)</li>
+            </ol>
+
+            <div class="callout warn">
+              <strong>Usuários/grupos comuns</strong>
+              <ul>
+                <li>IIS: <code>IIS_IUSRS</code> ou identidade do App Pool</li>
+                <li>Apache/XAMPP: usuário do serviço do Apache</li>
+                <li>Task Scheduler: usuário configurado na tarefa</li>
+              </ul>
+            </div>
+
+            <div class="callout good">
+              <strong>Como testar rápido</strong>
+              Abra o endpoint de health do webapp:
+              <ul>
+                <li><code>http://localhost:8080/api/health.php</code></li>
+              </ul>
+              Se não conseguir escrever no hotfolder, ele retorna erro com o motivo.
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec10">
+            <h2>10) Diagnóstico rápido</h2>
+
+            <div class="grid_two">
+              <div class="callout bad">
+                <strong>Automatizador não imprime</strong>
+                <ul>
+                  <li>Confirme que o script está rodando</li>
+                  <li>Veja <b>hotfolder.log</b></li>
+                  <li>Veja se o job foi para <b>error</b></li>
+                </ul>
+              </div>
+              <div class="callout warn">
+                <strong>Frente e verso vira dois cartões</strong>
+                <ul>
+                  <li>Driver não está realmente em duplex</li>
+                  <li>Ajuste nas preferências do driver</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="callout warn">
+              <strong>Câmera não abre</strong>
+              <ul>
+                <li>Cheque permissões do navegador</li>
+                <li>Use <b>localhost</b> (mais previsível)</li>
+                <li>Evite IP sem HTTPS em ambientes travados</li>
+              </ul>
+            </div>
+
+            <div class="callout good">
+              <strong>Onde olhar primeiro</strong>
+              <ul>
+                <li><b>Logs:</b> <code>C:\card_hotfolder\logs\hotfolder.log</code></li>
+                <li><b>Falhas:</b> <code>C:\card_hotfolder\error</code></li>
+                <li><b>Sucessos:</b> <code>C:\card_hotfolder\done</code></li>
+              </ul>
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec11">
+            <h2>11) Checklist final (antes de dizer “está pronto”)</h2>
+
+            <ul class="checklist">
+              <li><span class="check"></span><div>Dualys imprime um teste no Windows (sem o webapp)</div></li>
+              <li><span class="check"></span><div>Nome exato da impressora confirmado (sem typo)</div></li>
+              <li><span class="check"></span><div>Pastas do hotfolder criadas e acessíveis</div></li>
+              <li><span class="check"></span><div>Automatizador processa uma imagem e move para <b>done</b></div></li>
+              <li><span class="check"></span><div>Teste de pasta + manifest (duplex) entendido e consistente com o driver</div></li>
+              <li><span class="check"></span><div>Webapp health retorna OK (hotfolder gravável)</div></li>
+              <li><span class="check"></span><div>Webapp “Só frente” cria job e imprime</div></li>
+              <li><span class="check"></span><div>Webapp “Frente e verso” cria job e imprime</div></li>
+              <li><span class="check"></span><div>Rodando como serviço (Task Scheduler) sem quebrar permissões</div></li>
+            </ul>
+          </section>
+
+          <div class="divider"></div>
+
+          <section id="sec12">
+            <h2>12) Coletar informações para suporte (quando pedir ajuda)</h2>
+            <p class="muted">Quando algo falhar, estas informações resolvem 90% dos casos:</p>
+
+            <ul>
+              <li>Nome exato da impressora no Windows</li>
+              <li>Windows 11 build (Configurações → Sistema → Sobre)</li>
+              <li>Trecho relevante do arquivo <code>hotfolder.log</code></li>
+              <li>Um exemplo completo de job que foi para <code>error</code> (pasta com manifest + imagens)</li>
+              <li>Se estava tentando simplex ou duplex</li>
+            </ul>
+
+            <div class="callout good">
+              <strong>Dica</strong>
+              Se o problema for só “o verso imprime separado”, quase sempre é ajuste de driver/duplex.
+              Se o problema for “webapp diz erro no health”, quase sempre é permissão de escrita no hotfolder.
+            </div>
+          </section>
+
+          <div class="footer">
+            Este arquivo é só documentação. Você pode imprimir/guardar junto do projeto e atualizar conforme o setup evoluir.
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function initCopyButtons() {
+      const copy_buttons = document.querySelectorAll("[data_copy_button]");
+      const updateButtonLabel = (button_element, label_text) => {
+        button_element.textContent = label_text;
+        window.setTimeout(() => {
+          button_element.textContent = "Copiar";
+        }, 900);
+      };
+
+      const copyCodeBlock = async (button_element) => {
+        const code_block_element = button_element.closest("[data_code_block]");
+        if (!code_block_element) return;
+
+        const code_element = code_block_element.querySelector("pre code");
+        if (!code_element) return;
+
+        const text_to_copy = code_element.textContent || "";
+        try {
+          await navigator.clipboard.writeText(text_to_copy);
+          updateButtonLabel(button_element, "Copiado");
+        } catch (error) {
+          // Fallback for restricted environments
+          const text_area = document.createElement("textarea");
+          text_area.value = text_to_copy;
+          text_area.style.position = "fixed";
+          text_area.style.left = "-9999px";
+          document.body.appendChild(text_area);
+          text_area.focus();
+          text_area.select();
+          const ok = document.execCommand("copy");
+          document.body.removeChild(text_area);
+          updateButtonLabel(button_element, ok ? "Copiado" : "Falhou");
+        }
+      };
+
+      copy_buttons.forEach((button_element) => {
+        button_element.addEventListener("click", () => copyCodeBlock(button_element));
+      });
+    })();
+  </script>
+</body>
+</html>
+"""
+file_path = "/mnt/data/guia_card_kiosk_hotfolder.html"
+with open(file_path, "w", encoding="utf-8") as file_handle:
+    file_handle.write(html_content)
+
+file_path
