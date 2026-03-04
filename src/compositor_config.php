@@ -45,8 +45,10 @@ return [
     ],
 
     // Path to a TTF font file.
-    'font_file_path' => '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    'font_file_path' => 'C:\\projetos\\evolis-dualys-tester\\public\\fonts\\DejaVuSans-Bold.ttf',
 
     // Text color
     'text_color_rgb' => ['r' => 20, 'g' => 20, 'b' => 20],
+
+    'imagemagick_binary_path' => 'C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI\\magick.exe',
 ];

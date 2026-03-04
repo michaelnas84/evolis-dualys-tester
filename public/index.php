@@ -1,32 +1,31 @@
 <?php
+
 declare(strict_types=1);
 
 session_start();
 
 if (!isset($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
 }
 
 $csrf_token = (string)$_SESSION['csrf_token'];
 ?>
 <!doctype html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Card Kiosk</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/js-sha256@0.11.0/build/sha256.min.js"></script>
 </head>
+
 <body class="h-screen bg-slate-950 text-slate-100 select-none overflow-hidden">
 
   <div class="h-full w-full">
 
     <!-- IDLE -->
     <div id="screen_idle" class="h-full w-full relative">
-      <div class="absolute inset-0">
-        <img id="idle_background" src="frames/frame-01.png" alt="" class="h-full w-full object-cover opacity-40" />
-      </div>
       <div class="absolute inset-0 flex items-center justify-center">
         <div class="text-center px-6">
           <div class="text-4xl sm:text-5xl font-semibold">Toque para começar</div>
@@ -135,12 +134,12 @@ $csrf_token = (string)$_SESSION['csrf_token'];
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                   <div>
                     <div class="text-lg font-semibold">Spotify</div>
-                    <div class="text-xs text-slate-400">Login fica salvo no navegador</div>
+                    <div class="text-xs text-slate-400">Teste via App Token (client_credentials). Sem login de usuário.</div>
                   </div>
                   <div class="flex gap-2 items-center">
-                    <button id="spotify_login_button" class="px-4 py-2 rounded-xl bg-white text-slate-900 font-semibold">Entrar</button>
+                    <button id="spotify_login_button" class="px-4 py-2 rounded-xl bg-white text-slate-900 font-semibold" disabled>Entrar</button>
                     <button id="spotify_logout_button" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700" disabled>Sair</button>
-                    <span id="spotify_auth_status" class="px-3 py-1 rounded-full border border-slate-700 text-xs text-slate-300">Deslogado</span>
+                    <span id="spotify_auth_status" class="px-3 py-1 rounded-full border border-slate-700 text-xs text-slate-300">—</span>
                   </div>
                 </div>
 
@@ -191,956 +190,855 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
   </div>
 
-<script>
-(() => {
-  const csrf_token = <?= json_encode($csrf_token, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  <script>
+    (() => {
+      const csrf_token = <?= json_encode($csrf_token, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
-  const api_create_job_url = "api/create_job.php";
-  const api_health_url = "api/health.php";
-  const api_get_compositor_config_url = "api/get_compositor_config.php";
-  const api_compose_image_url = "api/compose_image.php";
+      const api_create_job_url = "api/create_job.php";
+      const api_health_url = "api/health.php";
+      const api_get_compositor_config_url = "api/get_compositor_config.php";
+      const api_compose_image_url = "api/compose_image.php";
 
-  const idle_timeout_seconds = 60;
-  let idle_seconds_left = idle_timeout_seconds;
-  let idle_interval_id = null;
+      const idle_timeout_seconds = 60;
+      let idle_seconds_left = idle_timeout_seconds;
+      let idle_interval_id = null;
 
-  let compositor_config = null;
-  let preview_aspect_ratio = 1;
+      let compositor_config = null;
+      let preview_aspect_ratio = 1;
 
-  let current_stream = null;
-  let current_device_id = null;
-  let available_video_devices = [];
-  let camera_ready = false;
+      let current_stream = null;
+      let current_device_id = null;
+      let available_video_devices = [];
+      let camera_ready = false;
 
-  let captured_photo_data_url = null;
-  let entry_mode = "manual"; // manual | spotify
-  let admin_unlocked = false;
-  let countdown_interval_id = null;
+      let captured_photo_data_url = null;
+      let entry_mode = "manual"; // manual | spotify
+      let admin_unlocked = false;
+      let countdown_interval_id = null;
 
-  // Spotify state
-  let spotify_selected_artist = null;
-  let spotify_selected_track = null;
+      // Spotify (App Token)
+      const spotify_api_base = "https://api.spotify.com/v1";
+      const spotify_app_token_api_url = "./api/spotify_app_token.php";
+      let spotify_app_access_token = null;
+      let spotify_app_expires_at_ms = 0;
 
-  const screen_idle = document.getElementById("screen_idle");
-  const screen_capture = document.getElementById("screen_capture");
-  const screen_form = document.getElementById("screen_form");
-  const screen_status = document.getElementById("screen_status");
+      let spotify_selected_artist = null;
+      let spotify_selected_track = null;
 
-  const idle_start_button = document.getElementById("idle_start_button");
-  const idle_health = document.getElementById("idle_health");
+      const screen_idle = document.getElementById("screen_idle");
+      const screen_capture = document.getElementById("screen_capture");
+      const screen_form = document.getElementById("screen_form");
+      const screen_status = document.getElementById("screen_status");
 
-  const camera_video = document.getElementById("camera_video");
-  const preview_container = document.getElementById("preview_container");
-  const captured_image = document.getElementById("captured_image");
-  const capture_button = document.getElementById("capture_button");
-  const retake_button = document.getElementById("retake_button");
-  const proceed_button = document.getElementById("proceed_button");
-  const switch_camera_button = document.getElementById("switch_camera_button");
-  const capture_cancel_button = document.getElementById("capture_cancel_button");
-  const countdown_overlay = document.getElementById("countdown_overlay");
-  const idle_countdown = document.getElementById("idle_countdown");
-  const capture_error = document.getElementById("capture_error");
+      const idle_start_button = document.getElementById("idle_start_button");
+      const idle_health = document.getElementById("idle_health");
 
-  const entry_mode_label = document.getElementById("entry_mode_label");
-  const admin_unlocked_label = document.getElementById("admin_unlocked_label");
+      const camera_video = document.getElementById("camera_video");
+      const preview_container = document.getElementById("preview_container");
+      const captured_image = document.getElementById("captured_image");
+      const capture_button = document.getElementById("capture_button");
+      const retake_button = document.getElementById("retake_button");
+      const proceed_button = document.getElementById("proceed_button");
+      const switch_camera_button = document.getElementById("switch_camera_button");
+      const capture_cancel_button = document.getElementById("capture_cancel_button");
+      const countdown_overlay = document.getElementById("countdown_overlay");
+      const idle_countdown = document.getElementById("idle_countdown");
+      const capture_error = document.getElementById("capture_error");
 
-  const person_name_input = document.getElementById("person_name_input");
-  const person_name_counter = document.getElementById("person_name_counter");
-  const panel_manual = document.getElementById("panel_manual");
-  const panel_spotify = document.getElementById("panel_spotify");
-  const manual_artist_input = document.getElementById("manual_artist_input");
-  const manual_track_input = document.getElementById("manual_track_input");
-  const artist_counter = document.getElementById("artist_counter");
-  const track_counter = document.getElementById("track_counter");
-  const form_back_button = document.getElementById("form_back_button");
-  const submit_button = document.getElementById("submit_button");
-  const form_error = document.getElementById("form_error");
+      const entry_mode_label = document.getElementById("entry_mode_label");
+      const admin_unlocked_label = document.getElementById("admin_unlocked_label");
 
-  const spotify_login_button = document.getElementById("spotify_login_button");
-  const spotify_logout_button = document.getElementById("spotify_logout_button");
-  const spotify_auth_status = document.getElementById("spotify_auth_status");
-  const spotify_artist_query = document.getElementById("spotify_artist_query");
-  const spotify_artist_search_button = document.getElementById("spotify_artist_search_button");
-  const spotify_artist_results = document.getElementById("spotify_artist_results");
-  const spotify_selected_artist_label = document.getElementById("spotify_selected_artist_label");
-  const spotify_track_results = document.getElementById("spotify_track_results");
-  const spotify_selected_values = document.getElementById("spotify_selected_values");
+      const person_name_input = document.getElementById("person_name_input");
+      const person_name_counter = document.getElementById("person_name_counter");
+      const panel_manual = document.getElementById("panel_manual");
+      const panel_spotify = document.getElementById("panel_spotify");
+      const manual_artist_input = document.getElementById("manual_artist_input");
+      const manual_track_input = document.getElementById("manual_track_input");
+      const artist_counter = document.getElementById("artist_counter");
+      const track_counter = document.getElementById("track_counter");
+      const form_back_button = document.getElementById("form_back_button");
+      const submit_button = document.getElementById("submit_button");
+      const form_error = document.getElementById("form_error");
 
-  const status_title = document.getElementById("status_title");
-  const status_message = document.getElementById("status_message");
-  const status_done_button = document.getElementById("status_done_button");
+      const spotify_login_button = document.getElementById("spotify_login_button");
+      const spotify_logout_button = document.getElementById("spotify_logout_button");
+      const spotify_auth_status = document.getElementById("spotify_auth_status");
+      const spotify_artist_query = document.getElementById("spotify_artist_query");
+      const spotify_artist_search_button = document.getElementById("spotify_artist_search_button");
+      const spotify_artist_results = document.getElementById("spotify_artist_results");
+      const spotify_selected_artist_label = document.getElementById("spotify_selected_artist_label");
+      const spotify_track_results = document.getElementById("spotify_track_results");
+      const spotify_selected_values = document.getElementById("spotify_selected_values");
 
-  function setScreen(screen_name) {
-    const screens = [screen_idle, screen_capture, screen_form, screen_status];
-    for (const screen of screens) {
-      screen.classList.add("hidden");
-    }
-    if (screen_name === "idle") screen_idle.classList.remove("hidden");
-    if (screen_name === "capture") screen_capture.classList.remove("hidden");
-    if (screen_name === "form") screen_form.classList.remove("hidden");
-    if (screen_name === "status") screen_status.classList.remove("hidden");
-  }
+      const status_title = document.getElementById("status_title");
+      const status_message = document.getElementById("status_message");
+      const status_done_button = document.getElementById("status_done_button");
 
-  function resetState() {
-    capture_error.textContent = "";
-    form_error.textContent = "";
-
-    captured_photo_data_url = null;
-    captured_image.src = "";
-    captured_image.classList.add("hidden");
-    camera_video.classList.remove("hidden");
-
-    capture_button.disabled = false;
-    capture_button.classList.remove("opacity-60");
-    retake_button.classList.add("hidden");
-    proceed_button.classList.add("hidden");
-
-    person_name_input.value = "";
-    manual_artist_input.value = "";
-    manual_track_input.value = "";
-
-    spotify_selected_artist = null;
-    spotify_selected_track = null;
-    spotify_artist_results.innerHTML = "";
-    spotify_track_results.innerHTML = "";
-    spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
-    spotify_selected_values.textContent = "Nada selecionado ainda.";
-
-    updateSubmitEnabled();
-  }
-
-  function resetIdleTimer() {
-    idle_seconds_left = idle_timeout_seconds;
-    idle_countdown.textContent = String(idle_seconds_left) + "s";
-  }
-
-  function startIdleTimer() {
-    stopIdleTimer();
-    resetIdleTimer();
-    idle_interval_id = window.setInterval(() => {
-      idle_seconds_left -= 1;
-      if (idle_seconds_left < 0) idle_seconds_left = 0;
-      idle_countdown.textContent = String(idle_seconds_left) + "s";
-
-      if (idle_seconds_left === 0) {
-        goIdle();
-      }
-    }, 1000);
-  }
-
-  function stopIdleTimer() {
-    if (idle_interval_id !== null) {
-      window.clearInterval(idle_interval_id);
-      idle_interval_id = null;
-    }
-  }
-
-  function goIdle() {
-    stopIdleTimer();
-    stopCamera();
-    resetState();
-    setScreen("idle");
-  }
-
-  async function fetchHealth() {
-    try {
-      const response = await fetch(api_health_url, { cache: "no-store" });
-      const data = await response.json();
-      if (data.ok) {
-        idle_health.textContent = "Hotfolder OK";
-      } else {
-        idle_health.textContent = "Hotfolder erro: " + (data.error || "desconhecido");
-      }
-    } catch {
-      idle_health.textContent = "Falha ao checar hotfolder";
-    }
-  }
-
-  function setPreviewAspectRatio(aspect_ratio) {
-    preview_aspect_ratio = aspect_ratio;
-    preview_container.style.aspectRatio = String(aspect_ratio);
-  }
-
-  async function enumerateVideoDevices() {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    available_video_devices = devices.filter(device => device.kind === "videoinput");
-  }
-
-  async function startCamera(device_id = null) {
-    capture_error.textContent = "";
-    camera_ready = false;
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error("getUserMedia não disponível neste navegador.");
-    }
-
-    stopCamera();
-
-    const constraints = {
-      video: device_id
-        ? { deviceId: { exact: device_id }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-        : { width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false
-    };
-
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    current_stream = stream;
-    camera_video.srcObject = stream;
-
-    await new Promise(resolve => {
-      camera_video.onloadedmetadata = () => resolve();
-    });
-
-    camera_ready = true;
-  }
-
-  function stopCamera() {
-    if (current_stream) {
-      for (const track of current_stream.getTracks()) {
-        track.stop();
-      }
-      current_stream = null;
-    }
-    camera_video.srcObject = null;
-    camera_ready = false;
-  }
-
-  function captureCurrentFrameAsJpegDataUrl() {
-    const video_width = camera_video.videoWidth || 0;
-    const video_height = camera_video.videoHeight || 0;
-    if (video_width === 0 || video_height === 0) {
-      throw new Error("Câmera ainda não está pronta.");
-    }
-
-    const target_width = 900;
-    const target_height = Math.round(target_width / preview_aspect_ratio);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = target_width;
-    canvas.height = target_height;
-
-    const ctx = canvas.getContext("2d");
-
-    const video_aspect_ratio = video_width / video_height;
-    let source_x = 0;
-    let source_y = 0;
-    let source_w = video_width;
-    let source_h = video_height;
-
-    if (video_aspect_ratio > preview_aspect_ratio) {
-      source_w = Math.round(video_height * preview_aspect_ratio);
-      source_x = Math.round((video_width - source_w) / 2);
-    } else {
-      source_h = Math.round(video_width / preview_aspect_ratio);
-      source_y = Math.round((video_height - source_h) / 2);
-    }
-
-    ctx.drawImage(camera_video, source_x, source_y, source_w, source_h, 0, 0, target_width, target_height);
-    return canvas.toDataURL("image/jpeg", 0.92);
-  }
-
-  function startCaptureFlow() {
-    capture_error.textContent = "";
-
-    if (!camera_ready) {
-      capture_error.textContent = "Câmera não disponível.";
-      return;
-    }
-
-    capture_button.disabled = true;
-    capture_button.classList.add("opacity-60");
-
-    let seconds_left = 3;
-    countdown_overlay.classList.remove("hidden");
-    countdown_overlay.querySelector("div").textContent = String(seconds_left);
-
-    if (countdown_interval_id !== null) {
-      window.clearInterval(countdown_interval_id);
-      countdown_interval_id = null;
-    }
-
-    countdown_interval_id = window.setInterval(() => {
-      seconds_left -= 1;
-
-      if (seconds_left > 0) {
-        countdown_overlay.querySelector("div").textContent = String(seconds_left);
-        return;
+      function setScreen(screen_name) {
+        const screens = [screen_idle, screen_capture, screen_form, screen_status];
+        for (const screen of screens) {
+          screen.classList.add("hidden");
+        }
+        if (screen_name === "idle") screen_idle.classList.remove("hidden");
+        if (screen_name === "capture") screen_capture.classList.remove("hidden");
+        if (screen_name === "form") screen_form.classList.remove("hidden");
+        if (screen_name === "status") screen_status.classList.remove("hidden");
       }
 
-      window.clearInterval(countdown_interval_id);
-      countdown_interval_id = null;
-      countdown_overlay.classList.add("hidden");
+      function resetState() {
+        capture_error.textContent = "";
+        form_error.textContent = "";
 
-      try {
-        captured_photo_data_url = captureCurrentFrameAsJpegDataUrl();
-        captured_image.src = captured_photo_data_url;
-        captured_image.classList.remove("hidden");
-        camera_video.classList.add("hidden");
+        captured_photo_data_url = null;
+        captured_image.src = "";
+        captured_image.classList.add("hidden");
+        camera_video.classList.remove("hidden");
 
-        retake_button.classList.remove("hidden");
-        proceed_button.classList.remove("hidden");
-
-        updateSubmitEnabled();
-      } catch (error) {
-        capture_error.textContent = String(error && error.message ? error.message : error);
         capture_button.disabled = false;
         capture_button.classList.remove("opacity-60");
-      }
-    }, 1000);
-  }
+        retake_button.classList.add("hidden");
+        proceed_button.classList.add("hidden");
 
-  function updateEntryModeUi() {
-    entry_mode_label.textContent = entry_mode === "spotify" ? "Spotify" : "Manual";
+        person_name_input.value = "";
+        manual_artist_input.value = "";
+        manual_track_input.value = "";
 
-    if (entry_mode === "spotify") {
-      panel_manual.classList.add("hidden");
-      panel_spotify.classList.remove("hidden");
-    } else {
-      panel_spotify.classList.add("hidden");
-      panel_manual.classList.remove("hidden");
-    }
+        spotify_selected_artist = null;
+        spotify_selected_track = null;
+        spotify_artist_results.innerHTML = "";
+        spotify_track_results.innerHTML = "";
+        spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
+        spotify_selected_values.textContent = "Nada selecionado ainda.";
 
-    updateSubmitEnabled();
-  }
-
-  function setAdminUnlocked(value) {
-    admin_unlocked = value;
-    if (admin_unlocked) {
-      admin_unlocked_label.classList.remove("hidden");
-    } else {
-      admin_unlocked_label.classList.add("hidden");
-    }
-  }
-
-  function updateCounter(input_element, counter_element, max_chars) {
-    const value = input_element.value || "";
-    const remaining = Math.max(0, max_chars - value.length);
-    counter_element.textContent = `${value.length}/${max_chars} (restam ${remaining})`;
-  }
-
-  function updateSubmitEnabled() {
-    const person_name = (person_name_input.value || "").trim();
-    let artist_name = "";
-    let track_name = "";
-
-    if (entry_mode === "spotify") {
-      artist_name = spotify_selected_artist ? String(spotify_selected_artist.name || "") : "";
-      track_name = spotify_selected_track ? String(spotify_selected_track.name || "") : "";
-    } else {
-      artist_name = (manual_artist_input.value || "").trim();
-      track_name = (manual_track_input.value || "").trim();
-    }
-
-    const ok = person_name !== "" && artist_name !== "" && track_name !== "" && captured_photo_data_url;
-    submit_button.disabled = !ok;
-  }
-
-  async function submitJob() {
-    form_error.textContent = "";
-    setScreen("status");
-    status_title.textContent = "Processando...";
-    status_message.textContent = "Montando imagem e criando job.";
-    status_done_button.classList.add("hidden");
-
-    const person_name = (person_name_input.value || "").trim();
-    const artist_name = entry_mode === "spotify"
-      ? (spotify_selected_artist ? String(spotify_selected_artist.name || "") : "")
-      : (manual_artist_input.value || "").trim();
-    const track_name = entry_mode === "spotify"
-      ? (spotify_selected_track ? String(spotify_selected_track.name || "") : "")
-      : (manual_track_input.value || "").trim();
-
-    try {
-      const compose_body = {
-        csrf_token,
-        preview_only: false,
-        person_name,
-        artist_name,
-        track_name,
-        photo_data_url: captured_photo_data_url
-      };
-
-      const compose_response = await fetch(api_compose_image_url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(compose_body)
-      });
-
-      const compose_data = await compose_response.json();
-      if (!compose_data.ok) {
-        throw new Error(compose_data.error || "Falha ao montar imagem.");
+        updateSubmitEnabled();
       }
 
-      const final_image_data_url = String(compose_data.final_image_data_url || "");
-      if (!final_image_data_url.startsWith("data:image/")) {
-        throw new Error("Resposta inválida do compositor.");
+      function resetIdleTimer() {
+        idle_seconds_left = idle_timeout_seconds;
+        idle_countdown.textContent = String(idle_seconds_left) + "s";
       }
 
-      const job_body = {
-        csrf_token,
-        print_mode: "front_only",
-        front_image_data_url: final_image_data_url,
-        back_image_data_url: ""
-      };
-
-      const response = await fetch(api_create_job_url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(job_body)
-      });
-
-      const data = await response.json();
-      if (!data.ok) {
-        throw new Error(data.error || "Falha ao criar job.");
-      }
-
-      status_title.textContent = "Pronto";
-      status_message.textContent = "Job criado: " + data.job_id;
-      status_done_button.classList.remove("hidden");
-    } catch (error) {
-      status_title.textContent = "Erro";
-      status_message.textContent = String(error && error.message ? error.message : error);
-      status_done_button.classList.remove("hidden");
-    }
-  }
-
-  async function loadCompositorConfig() {
-    const response = await fetch(api_get_compositor_config_url, { cache: "no-store" });
-    const data = await response.json();
-    if (!data.ok) {
-      throw new Error(data.error || "Falha ao carregar config do compositor.");
-    }
-    compositor_config = data.compositor_config;
-
-    const photo_box = compositor_config.photo_box;
-    const aspect_ratio = Number(photo_box.width) / Number(photo_box.height);
-    if (Number.isFinite(aspect_ratio) && aspect_ratio > 0) {
-      setPreviewAspectRatio(aspect_ratio);
-    }
-
-    const name_max = Number(compositor_config.text_fields?.person_name?.max_chars || 40);
-    const artist_max = Number(compositor_config.text_fields?.artist_name?.max_chars || 40);
-    const track_max = Number(compositor_config.text_fields?.track_name?.max_chars || 40);
-
-    person_name_input.maxLength = name_max;
-    manual_artist_input.maxLength = artist_max;
-    manual_track_input.maxLength = track_max;
-
-    updateCounter(person_name_input, person_name_counter, name_max);
-    updateCounter(manual_artist_input, artist_counter, artist_max);
-    updateCounter(manual_track_input, track_counter, track_max);
-  }
-
-  async function fetchAndStartCamera() {
-    await enumerateVideoDevices();
-    current_device_id = available_video_devices[0]?.deviceId || null;
-    await startCamera(current_device_id);
-  }
-
-  // UI events
-  idle_start_button.addEventListener("click", async () => {
-    resetState();
-    try {
-      await fetchAndStartCamera();
-      setScreen("capture");
-      startIdleTimer();
-      resetIdleTimer();
-    } catch (error) {
-      capture_error.textContent = String(error && error.message ? error.message : error);
-      setScreen("capture");
-    }
-  });
-
-  capture_cancel_button.addEventListener("click", () => goIdle());
-
-  capture_button.addEventListener("click", () => {
-    resetIdleTimer();
-    startCaptureFlow();
-  });
-
-  retake_button.addEventListener("click", () => {
-    resetIdleTimer();
-    captured_photo_data_url = null;
-    captured_image.src = "";
-    captured_image.classList.add("hidden");
-    camera_video.classList.remove("hidden");
-    capture_button.disabled = false;
-    capture_button.classList.remove("opacity-60");
-    retake_button.classList.add("hidden");
-    proceed_button.classList.add("hidden");
-    updateSubmitEnabled();
-  });
-
-  proceed_button.addEventListener("click", () => {
-    stopIdleTimer();
-    stopCamera();
-    setScreen("form");
-    updateSubmitEnabled();
-  });
-
-  switch_camera_button.addEventListener("click", async () => {
-    resetIdleTimer();
-    try {
-      if (available_video_devices.length === 0) {
-        await enumerateVideoDevices();
-      }
-      if (available_video_devices.length <= 1) {
-        return;
-      }
-
-      const current_index = available_video_devices.findIndex(device => device.deviceId === current_device_id);
-      const next_index = (current_index + 1) % available_video_devices.length;
-      current_device_id = available_video_devices[next_index].deviceId;
-
-      await startCamera(current_device_id);
-    } catch (error) {
-      capture_error.textContent = String(error && error.message ? error.message : error);
-    }
-  });
-
-  form_back_button.addEventListener("click", async () => {
-    try {
-      await fetchAndStartCamera();
-      setScreen("capture");
-      startIdleTimer();
-      resetIdleTimer();
-    } catch (error) {
-      form_error.textContent = String(error && error.message ? error.message : error);
-    }
-  });
-
-  submit_button.addEventListener("click", () => submitJob());
-  status_done_button.addEventListener("click", () => goIdle());
-
-  person_name_input.addEventListener("input", () => {
-    updateCounter(person_name_input, person_name_counter, person_name_input.maxLength);
-    updateSubmitEnabled();
-  });
-  manual_artist_input.addEventListener("input", () => {
-    updateCounter(manual_artist_input, artist_counter, manual_artist_input.maxLength);
-    updateSubmitEnabled();
-  });
-  manual_track_input.addEventListener("input", () => {
-    updateCounter(manual_track_input, track_counter, manual_track_input.maxLength);
-    updateSubmitEnabled();
-  });
-
-  // Global user interaction resets idle timer (only when capturing)
-  ["click", "touchstart", "mousemove", "keydown"].forEach(event_name => {
-    document.addEventListener(event_name, () => {
-      if (!screen_capture.classList.contains("hidden")) {
+      function startIdleTimer() {
+        stopIdleTimer();
         resetIdleTimer();
+        idle_interval_id = window.setInterval(() => {
+          idle_seconds_left -= 1;
+          if (idle_seconds_left < 0) idle_seconds_left = 0;
+          idle_countdown.textContent = String(idle_seconds_left) + "s";
+
+          if (idle_seconds_left === 0) {
+            goIdle();
+          }
+        }, 1000);
       }
-    }, { passive: true });
-  });
 
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  // ===== Spotify (adaptado do spotify-list-test.html) =====
-  const spotify_client_id = "1e0ca3980285487bb2eecd0f8899e9d6";
-  const spotify_redirect_uri = window.location.origin + window.location.pathname;
-  const spotify_authorization_endpoint = "https://accounts.spotify.com/authorize";
-  const spotify_token_endpoint = "https://accounts.spotify.com/api/token";
-  const spotify_api_base = "https://api.spotify.com/v1";
-  const spotify_requested_scopes = "";
-
-  const spotify_storage_keys = {
-    token_data: "spotify_token_data",
-    code_verifier: "spotify_code_verifier",
-    oauth_state: "spotify_oauth_state"
-  };
-
-  function getRandomString(length) {
-    const array = new Uint8Array(length);
-    crypto.getRandomValues(array);
-    return Array.from(array, (byte) => ("0" + byte.toString(16)).slice(-2)).join("");
-  }
-
-  function base64UrlEncode(array_buffer) {
-    const bytes = new Uint8Array(array_buffer);
-    let binary = "";
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  }
-
-  async function generateCodeChallenge(code_verifier) {
-    if (window.crypto?.subtle?.digest) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(code_verifier);
-      const digest = await window.crypto.subtle.digest("SHA-256", data);
-      return base64UrlEncode(digest);
-    }
-    if (window.sha256?.arrayBuffer) {
-      const digest = window.sha256.arrayBuffer(code_verifier);
-      return base64UrlEncode(digest);
-    }
-    throw new Error("SHA-256 não disponível.");
-  }
-
-  function setSpotifyTokenData(token_data) {
-    localStorage.setItem(spotify_storage_keys.token_data, JSON.stringify(token_data));
-  }
-
-  function getSpotifyTokenData() {
-    const raw = localStorage.getItem(spotify_storage_keys.token_data);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-
-  function clearSpotifyTokenData() {
-    localStorage.removeItem(spotify_storage_keys.token_data);
-  }
-
-  function isSpotifyTokenValid(token_data) {
-    if (!token_data) return false;
-    if (!token_data.access_token) return false;
-    if (!token_data.expires_at_ms) return false;
-    return Date.now() < token_data.expires_at_ms - 10_000;
-  }
-
-  async function spotifyApiFetch(url, options = {}) {
-    const token_data = getSpotifyTokenData();
-    if (!isSpotifyTokenValid(token_data)) {
-      throw new Error("Token inválido ou expirado. Faça login novamente.");
-    }
-
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token_data.access_token}`
+      function stopIdleTimer() {
+        if (idle_interval_id !== null) {
+          window.clearInterval(idle_interval_id);
+          idle_interval_id = null;
+        }
       }
-    });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Spotify API error (${response.status}): ${text}`);
-    }
+      function goIdle() {
+        stopIdleTimer();
+        stopCamera();
+        resetState();
+        setScreen("idle");
+      }
 
-    return response.json();
-  }
+      async function fetchHealth() {
+        try {
+          const response = await fetch(api_health_url, {
+            cache: "no-store"
+          });
+          const data = await response.json();
+          if (data.ok) {
+            idle_health.textContent = "Hotfolder OK";
+          } else {
+            idle_health.textContent = "Hotfolder erro: " + (data.error || "desconhecido");
+          }
+        } catch {
+          idle_health.textContent = "Falha ao checar hotfolder";
+        }
+      }
 
-  async function spotifyRedirectToAuthorize() {
-    if (!spotify_client_id) {
-      alert("Client ID do Spotify não configurado.");
-      return;
-    }
+      function setPreviewAspectRatio(aspect_ratio) {
+        preview_aspect_ratio = aspect_ratio;
+        preview_container.style.aspectRatio = String(aspect_ratio);
+      }
 
-    const code_verifier = getRandomString(64);
-    const code_challenge = await generateCodeChallenge(code_verifier);
-    const oauth_state = getRandomString(16);
+      async function enumerateVideoDevices() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        available_video_devices = devices.filter(device => device.kind === "videoinput");
+      }
 
-    sessionStorage.setItem(spotify_storage_keys.code_verifier, code_verifier);
-    sessionStorage.setItem(spotify_storage_keys.oauth_state, oauth_state);
+      async function startCamera(device_id = null) {
+        capture_error.textContent = "";
+        camera_ready = false;
 
-    const params = new URLSearchParams({
-      client_id: spotify_client_id,
-      response_type: "code",
-      redirect_uri: spotify_redirect_uri,
-      code_challenge_method: "S256",
-      code_challenge,
-      state: oauth_state
-    });
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("getUserMedia não disponível neste navegador.");
+        }
 
-    if (spotify_requested_scopes) {
-      params.set("scope", spotify_requested_scopes);
-    }
+        stopCamera();
 
-    window.location.assign(`${spotify_authorization_endpoint}?${params.toString()}`);
-  }
+        const constraints = {
+          video: device_id ? {
+            deviceId: {
+              exact: device_id
+            },
+            width: {
+              ideal: 1920
+            },
+            height: {
+              ideal: 1080
+            }
+          } : {
+            width: {
+              ideal: 1920
+            },
+            height: {
+              ideal: 1080
+            }
+          },
+          audio: false
+        };
 
-  async function spotifyExchangeCodeForToken(code) {
-    const code_verifier = sessionStorage.getItem(spotify_storage_keys.code_verifier);
-    if (!code_verifier) throw new Error("code_verifier não encontrado. Refaça o login.");
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        current_stream = stream;
+        camera_video.srcObject = stream;
 
-    const body = new URLSearchParams({
-      client_id: spotify_client_id,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: spotify_redirect_uri,
-      code_verifier
-    });
+        await new Promise(resolve => {
+          camera_video.onloadedmetadata = () => resolve();
+        });
 
-    const response = await fetch(spotify_token_endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString()
-    });
+        camera_ready = true;
+      }
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Token exchange falhou (${response.status}): ${text}`);
-    }
+      function stopCamera() {
+        if (current_stream) {
+          for (const track of current_stream.getTracks()) {
+            track.stop();
+          }
+          current_stream = null;
+        }
+        camera_video.srcObject = null;
+        camera_ready = false;
+      }
 
-    const token_response = await response.json();
-    const expires_at_ms = Date.now() + (token_response.expires_in * 1000);
+      function captureCurrentFrameAsJpegDataUrl() {
+        const video_width = camera_video.videoWidth || 0;
+        const video_height = camera_video.videoHeight || 0;
+        if (video_width === 0 || video_height === 0) {
+          throw new Error("Câmera ainda não está pronta.");
+        }
 
-    setSpotifyTokenData({
-      access_token: token_response.access_token,
-      refresh_token: token_response.refresh_token || null,
-      expires_at_ms
-    });
+        const target_width = 900;
+        const target_height = Math.round(target_width / preview_aspect_ratio);
 
-    sessionStorage.removeItem(spotify_storage_keys.code_verifier);
-  }
+        const canvas = document.createElement("canvas");
+        canvas.width = target_width;
+        canvas.height = target_height;
 
-  async function spotifyHandleRedirectCallback() {
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get("code");
-    const returned_state = url.searchParams.get("state");
-    if (!code) return;
+        const ctx = canvas.getContext("2d");
 
-    const expected_state = sessionStorage.getItem(spotify_storage_keys.oauth_state);
-    sessionStorage.removeItem(spotify_storage_keys.oauth_state);
+        const video_aspect_ratio = video_width / video_height;
+        let source_x = 0;
+        let source_y = 0;
+        let source_w = video_width;
+        let source_h = video_height;
 
-    if (!expected_state || expected_state !== returned_state) {
-      throw new Error("State inválido (possível erro de autenticação).");
-    }
+        if (video_aspect_ratio > preview_aspect_ratio) {
+          source_w = Math.round(video_height * preview_aspect_ratio);
+          source_x = Math.round((video_width - source_w) / 2);
+        } else {
+          source_h = Math.round(video_width / preview_aspect_ratio);
+          source_y = Math.round((video_height - source_h) / 2);
+        }
 
-    await spotifyExchangeCodeForToken(code);
+        ctx.drawImage(camera_video, source_x, source_y, source_w, source_h, 0, 0, target_width, target_height);
+        return canvas.toDataURL("image/jpeg", 0.92);
+      }
 
-    const clean_url = new URL(window.location.href);
-    clean_url.searchParams.delete("code");
-    clean_url.searchParams.delete("state");
-    window.history.replaceState({}, document.title, clean_url.toString());
-  }
+      function startCaptureFlow() {
+        capture_error.textContent = "";
 
-  function spotifyUpdateAuthUi() {
-    const token_data = getSpotifyTokenData();
-    const logged_in = isSpotifyTokenValid(token_data);
+        if (!camera_ready) {
+          capture_error.textContent = "Câmera não disponível.";
+          return;
+        }
 
-    spotify_login_button.disabled = logged_in;
-    spotify_logout_button.disabled = !logged_in;
-    spotify_artist_search_button.disabled = !logged_in;
+        capture_button.disabled = true;
+        capture_button.classList.add("opacity-60");
 
-    spotify_auth_status.textContent = logged_in ? "Logado" : "Deslogado";
-    spotify_auth_status.className = `px-3 py-1 rounded-full border border-slate-700 text-xs ${logged_in ? "text-emerald-300" : "text-slate-300"}`;
-  }
+        let seconds_left = 3;
+        countdown_overlay.classList.remove("hidden");
+        countdown_overlay.querySelector("div").textContent = String(seconds_left);
 
-  function spotifyRenderSelected() {
-    if (!spotify_selected_artist && !spotify_selected_track) {
-      spotify_selected_values.textContent = "Nada selecionado ainda.";
-      return;
-    }
+        if (countdown_interval_id !== null) {
+          window.clearInterval(countdown_interval_id);
+          countdown_interval_id = null;
+        }
 
-    const artist_html = spotify_selected_artist
-      ? `<div><strong>Artista:</strong> ${escapeHtml(spotify_selected_artist.name)}</div>`
-      : `<div><strong>Artista:</strong> (não selecionado)</div>`;
+        countdown_interval_id = window.setInterval(() => {
+          seconds_left -= 1;
 
-    const track_html = spotify_selected_track
-      ? `<div><strong>Música:</strong> ${escapeHtml(spotify_selected_track.name)}</div>`
-      : `<div><strong>Música:</strong> (não selecionada)</div>`;
+          if (seconds_left > 0) {
+            countdown_overlay.querySelector("div").textContent = String(seconds_left);
+            return;
+          }
 
-    spotify_selected_values.innerHTML = `${artist_html}${track_html}`;
-  }
+          window.clearInterval(countdown_interval_id);
+          countdown_interval_id = null;
+          countdown_overlay.classList.add("hidden");
 
-  function spotifyRenderArtistResults(artists) {
-    spotify_artist_results.innerHTML = "";
+          try {
+            captured_photo_data_url = captureCurrentFrameAsJpegDataUrl();
+            captured_image.src = captured_photo_data_url;
+            captured_image.classList.remove("hidden");
+            camera_video.classList.add("hidden");
 
-    if (!artists.length) {
-      spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Nenhum artista encontrado.</div>`;
-      return;
-    }
+            retake_button.classList.remove("hidden");
+            proceed_button.classList.remove("hidden");
 
-    for (const artist of artists) {
-      const image_url = artist.images?.[2]?.url || artist.images?.[1]?.url || artist.images?.[0]?.url || "";
-      const item = document.createElement("div");
-      item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
-      item.innerHTML = `
-        <img alt="" src="${escapeHtml(image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
-        <div class="flex-1">
-          <div class="font-semibold">${escapeHtml(artist.name)}</div>
-          <div class="text-xs text-slate-400">Popularidade: ${escapeHtml(artist.popularity ?? "—")}</div>
-        </div>
-        <button class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700" data_artist_id="${escapeHtml(artist.id)}">Escolher</button>
-      `;
-      item.querySelector("button").addEventListener("click", () => {
-        spotifySelectArtist({ id: artist.id, name: artist.name });
+            updateSubmitEnabled();
+          } catch (error) {
+            capture_error.textContent = String(error && error.message ? error.message : error);
+            capture_button.disabled = false;
+            capture_button.classList.remove("opacity-60");
+          }
+        }, 1000);
+      }
+
+      function updateEntryModeUi() {
+        entry_mode_label.textContent = entry_mode === "spotify" ? "Spotify" : "Manual";
+
+        if (entry_mode === "spotify") {
+          panel_manual.classList.add("hidden");
+          panel_spotify.classList.remove("hidden");
+        } else {
+          panel_spotify.classList.add("hidden");
+          panel_manual.classList.remove("hidden");
+        }
+
+        updateSubmitEnabled();
+      }
+
+      function setAdminUnlocked(value) {
+        admin_unlocked = value;
+        if (admin_unlocked) {
+          admin_unlocked_label.classList.remove("hidden");
+        } else {
+          admin_unlocked_label.classList.add("hidden");
+        }
+      }
+
+      function updateCounter(input_element, counter_element, max_chars) {
+        const value = input_element.value || "";
+        const remaining = Math.max(0, max_chars - value.length);
+        counter_element.textContent = `${value.length}/${max_chars} (restam ${remaining})`;
+      }
+
+      function updateSubmitEnabled() {
+        const person_name = (person_name_input.value || "").trim();
+        let artist_name = "";
+        let track_name = "";
+
+        if (entry_mode === "spotify") {
+          artist_name = spotify_selected_artist ? String(spotify_selected_artist.name || "") : "";
+          track_name = spotify_selected_track ? String(spotify_selected_track.name || "") : "";
+        } else {
+          artist_name = (manual_artist_input.value || "").trim();
+          track_name = (manual_track_input.value || "").trim();
+        }
+
+        const ok = person_name !== "" && artist_name !== "" && track_name !== "" && captured_photo_data_url;
+        submit_button.disabled = !ok;
+      }
+
+      async function submitJob() {
+        form_error.textContent = "";
+        setScreen("status");
+        status_title.textContent = "Processando...";
+        status_message.textContent = "Montando imagem e criando job.";
+        status_done_button.classList.add("hidden");
+
+        const person_name = (person_name_input.value || "").trim();
+        const artist_name = entry_mode === "spotify" ?
+          (spotify_selected_artist ? String(spotify_selected_artist.name || "") : "") :
+          (manual_artist_input.value || "").trim();
+        const track_name = entry_mode === "spotify" ?
+          (spotify_selected_track ? String(spotify_selected_track.name || "") : "") :
+          (manual_track_input.value || "").trim();
+
+        try {
+          const compose_body = {
+            csrf_token,
+            preview_only: false,
+            person_name,
+            artist_name,
+            track_name,
+            photo_data_url: captured_photo_data_url
+          };
+
+          const compose_response = await fetch(api_compose_image_url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(compose_body)
+          });
+
+          const compose_data = await compose_response.json();
+          if (!compose_data.ok) {
+            throw new Error(compose_data.error || "Falha ao montar imagem.");
+          }
+
+          const final_image_data_url = String(compose_data.final_image_data_url || "");
+          if (!final_image_data_url.startsWith("data:image/")) {
+            throw new Error("Resposta inválida do compositor.");
+          }
+
+          const job_body = {
+            csrf_token,
+            print_mode: "front_only",
+            front_image_data_url: final_image_data_url,
+            back_image_data_url: ""
+          };
+
+          const response = await fetch(api_create_job_url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(job_body)
+          });
+
+          const data = await response.json();
+          if (!data.ok) {
+            throw new Error(data.error || "Falha ao criar job.");
+          }
+
+          status_title.textContent = "Pronto";
+          status_message.textContent = "Job criado: " + data.job_id;
+          status_done_button.classList.remove("hidden");
+        } catch (error) {
+          status_title.textContent = "Erro";
+          status_message.textContent = String(error && error.message ? error.message : error);
+          status_done_button.classList.remove("hidden");
+        }
+      }
+
+      async function loadCompositorConfig() {
+        const response = await fetch(api_get_compositor_config_url, {
+          cache: "no-store"
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          throw new Error(data.error || "Falha ao carregar config do compositor.");
+        }
+        compositor_config = data.compositor_config;
+
+        const photo_box = compositor_config.photo_box;
+        const aspect_ratio = Number(photo_box.width) / Number(photo_box.height);
+        if (Number.isFinite(aspect_ratio) && aspect_ratio > 0) {
+          setPreviewAspectRatio(aspect_ratio);
+        }
+
+        const name_max = Number(compositor_config.text_fields?.person_name?.max_chars || 40);
+        const artist_max = Number(compositor_config.text_fields?.artist_name?.max_chars || 40);
+        const track_max = Number(compositor_config.text_fields?.track_name?.max_chars || 40);
+
+        person_name_input.maxLength = name_max;
+        manual_artist_input.maxLength = artist_max;
+        manual_track_input.maxLength = track_max;
+
+        updateCounter(person_name_input, person_name_counter, name_max);
+        updateCounter(manual_artist_input, artist_counter, artist_max);
+        updateCounter(manual_track_input, track_counter, track_max);
+      }
+
+      async function fetchAndStartCamera() {
+        await enumerateVideoDevices();
+        current_device_id = available_video_devices[0]?.deviceId || null;
+        await startCamera(current_device_id);
+      }
+
+      // UI events
+      idle_start_button.addEventListener("click", async () => {
+        resetState();
+        try {
+          await fetchAndStartCamera();
+          setScreen("capture");
+          startIdleTimer();
+          resetIdleTimer();
+        } catch (error) {
+          capture_error.textContent = String(error && error.message ? error.message : error);
+          setScreen("capture");
+        }
       });
-      spotify_artist_results.appendChild(item);
-    }
-  }
 
-  function spotifyRenderTrackResults(tracks) {
-    spotify_track_results.innerHTML = "";
+      capture_cancel_button.addEventListener("click", () => goIdle());
 
-    if (!tracks.length) {
-      spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Não encontrei top tracks.</div>`;
-      return;
-    }
-
-    for (const track of tracks) {
-      const album_image_url = track.album?.images?.[2]?.url || track.album?.images?.[1]?.url || track.album?.images?.[0]?.url || "";
-      const item = document.createElement("div");
-      item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
-      item.innerHTML = `
-        <img alt="" src="${escapeHtml(album_image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
-        <div class="flex-1">
-          <div class="font-semibold">${escapeHtml(track.name)}</div>
-          <div class="text-xs text-slate-400">${escapeHtml(track.album?.name || "")}</div>
-        </div>
-        <button class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold">Escolher</button>
-      `;
-      item.querySelector("button").addEventListener("click", () => {
-        spotifySelectTrack({ id: track.id, name: track.name });
+      capture_button.addEventListener("click", () => {
+        resetIdleTimer();
+        startCaptureFlow();
       });
-      spotify_track_results.appendChild(item);
-    }
-  }
 
-  async function spotifySearchArtist() {
-    const query = spotify_artist_query.value.trim();
-    spotify_artist_results.innerHTML = "";
-    spotify_track_results.innerHTML = "";
-    spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
-    spotify_selected_artist = null;
-    spotify_selected_track = null;
-    spotifyRenderSelected();
-    updateSubmitEnabled();
-
-    if (!query) {
-      spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Digite um nome pra buscar.</div>`;
-      return;
-    }
-
-    try {
-      const url = new URL(`${spotify_api_base}/search`);
-      url.searchParams.set("q", query);
-      url.searchParams.set("type", "artist");
-      url.searchParams.set("limit", "10");
-      const response_json = await spotifyApiFetch(url.toString());
-      const artists = response_json?.artists?.items || [];
-      spotifyRenderArtistResults(artists);
-    } catch (error) {
-      spotify_artist_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
-    }
-  }
-
-  async function spotifyFetchTopTracks(artist_id) {
-    try {
-      const url = new URL(`${spotify_api_base}/artists/${artist_id}/top-tracks`);
-      url.searchParams.set("market", "BR");
-      const response_json = await spotifyApiFetch(url.toString());
-      const tracks = response_json?.tracks || [];
-      spotifyRenderTrackResults(tracks);
-    } catch (error) {
-      spotify_track_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
-    }
-  }
-
-  function spotifySelectArtist(artist) {
-    spotify_selected_artist = artist;
-    spotify_selected_track = null;
-    spotify_selected_artist_label.innerHTML = `Artista selecionado: <strong>${escapeHtml(artist.name)}</strong>`;
-    spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Carregando músicas...</div>`;
-    spotifyRenderSelected();
-    updateSubmitEnabled();
-    spotifyFetchTopTracks(artist.id);
-  }
-
-  function spotifySelectTrack(track) {
-    spotify_selected_track = track;
-    spotifyRenderSelected();
-    updateSubmitEnabled();
-  }
-
-  function spotifyLogout() {
-    clearSpotifyTokenData();
-    spotify_selected_artist = null;
-    spotify_selected_track = null;
-    spotify_artist_results.innerHTML = "";
-    spotify_track_results.innerHTML = "";
-    spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
-    spotifyRenderSelected();
-    spotifyUpdateAuthUi();
-    updateSubmitEnabled();
-  }
-
-  spotify_login_button.addEventListener("click", spotifyRedirectToAuthorize);
-  spotify_logout_button.addEventListener("click", spotifyLogout);
-  spotify_artist_search_button.addEventListener("click", spotifySearchArtist);
-  spotify_artist_query.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !spotify_artist_search_button.disabled) spotifySearchArtist();
-  });
-
-  // Admin unlock + mode toggle
-  document.addEventListener("keydown", async (event) => {
-    const is_toggle_shortcut = event.ctrlKey && event.altKey && (event.key === "p" || event.key === "P");
-    const is_dashboard_shortcut = event.ctrlKey && event.altKey && (event.key === "d" || event.key === "D");
-    if (!is_toggle_shortcut && !is_dashboard_shortcut) return;
-
-    event.preventDefault();
-
-    if (is_dashboard_shortcut) {
-      if (!admin_unlocked) {
-        alert('Destrave o admin primeiro (Ctrl + Alt + P).');
-        return;
-      }
-      window.open('admin/index.php', '_blank');
-      return;
-    }
-
-    if (admin_unlocked) {
-      entry_mode = entry_mode === "manual" ? "spotify" : "manual";
-      updateEntryModeUi();
-      return;
-    }
-
-    const password = window.prompt("Senha admin:");
-    if (!password) return;
-
-    try {
-      const response = await fetch("admin/unlock.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password })
+      retake_button.addEventListener("click", () => {
+        resetIdleTimer();
+        captured_photo_data_url = null;
+        captured_image.src = "";
+        captured_image.classList.add("hidden");
+        camera_video.classList.remove("hidden");
+        capture_button.disabled = false;
+        capture_button.classList.remove("opacity-60");
+        retake_button.classList.add("hidden");
+        proceed_button.classList.add("hidden");
+        updateSubmitEnabled();
       });
-      const data = await response.json();
-      if (!data.ok) {
-        alert("Senha inválida");
-        return;
+
+      proceed_button.addEventListener("click", () => {
+        stopIdleTimer();
+        stopCamera();
+        setScreen("form");
+        updateSubmitEnabled();
+      });
+
+      switch_camera_button.addEventListener("click", async () => {
+        resetIdleTimer();
+        try {
+          if (available_video_devices.length === 0) {
+            await enumerateVideoDevices();
+          }
+          if (available_video_devices.length <= 1) {
+            return;
+          }
+
+          const current_index = available_video_devices.findIndex(device => device.deviceId === current_device_id);
+          const next_index = (current_index + 1) % available_video_devices.length;
+          current_device_id = available_video_devices[next_index].deviceId;
+
+          await startCamera(current_device_id);
+        } catch (error) {
+          capture_error.textContent = String(error && error.message ? error.message : error);
+        }
+      });
+
+      form_back_button.addEventListener("click", async () => {
+        try {
+          await fetchAndStartCamera();
+          setScreen("capture");
+          startIdleTimer();
+          resetIdleTimer();
+        } catch (error) {
+          form_error.textContent = String(error && error.message ? error.message : error);
+        }
+      });
+
+      submit_button.addEventListener("click", () => submitJob());
+      status_done_button.addEventListener("click", () => goIdle());
+
+      person_name_input.addEventListener("input", () => {
+        updateCounter(person_name_input, person_name_counter, person_name_input.maxLength);
+        updateSubmitEnabled();
+      });
+      manual_artist_input.addEventListener("input", () => {
+        updateCounter(manual_artist_input, artist_counter, manual_artist_input.maxLength);
+        updateSubmitEnabled();
+      });
+      manual_track_input.addEventListener("input", () => {
+        updateCounter(manual_track_input, track_counter, manual_track_input.maxLength);
+        updateSubmitEnabled();
+      });
+
+      // Global user interaction resets idle timer (only when capturing)
+      ["click", "touchstart", "mousemove", "keydown"].forEach(event_name => {
+        document.addEventListener(event_name, () => {
+          if (!screen_capture.classList.contains("hidden")) {
+            resetIdleTimer();
+          }
+        }, {
+          passive: true
+        });
+      });
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
       }
-      setAdminUnlocked(true);
-      entry_mode = entry_mode === "manual" ? "spotify" : "manual";
-      updateEntryModeUi();
-    } catch {
-      alert("Falha ao validar senha");
-    }
-  });
 
-  // Init
-  setScreen("idle");
-  fetchHealth();
+      async function getSpotifyAppToken() {
+        if (spotify_app_access_token && Date.now() < spotify_app_expires_at_ms - 10_000) {
+          return spotify_app_access_token;
+        }
 
-  (async () => {
-    try {
-      await spotifyHandleRedirectCallback();
-    } catch (error) {
-      alert(String(error && error.message ? error.message : error));
-      spotifyLogout();
-    }
-    spotifyUpdateAuthUi();
+        const response = await fetch(spotify_app_token_api_url, {
+          cache: "no-store"
+        });
+        const data = await response.json();
 
-    try {
-      await loadCompositorConfig();
-    } catch (error) {
-      idle_health.textContent = String(error && error.message ? error.message : error);
-    }
+        if (!response.ok) {
+          throw new Error(`Spotify app token error (${response.status}): ${JSON.stringify(data)}`);
+        }
 
-    updateEntryModeUi();
-  })();
-})();
-</script>
+        spotify_app_access_token = data.access_token;
+        spotify_app_expires_at_ms = Date.now() + (Number(data.expires_in || 0) * 1000);
+        return spotify_app_access_token;
+      }
+
+      async function spotifyApiFetch(url, options = {}) {
+        const access_token = await getSpotifyAppToken();
+
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            ...(options.headers || {}),
+            Authorization: `Bearer ${access_token}`
+          }
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Spotify API error (${response.status}): ${text}`);
+        }
+
+        return response.json();
+      }
+
+      function spotifyUpdateAuthUi() {
+        spotify_login_button.disabled = true;
+        spotify_logout_button.disabled = true;
+
+        spotify_artist_search_button.disabled = false;
+        spotify_auth_status.textContent = "App token";
+        spotify_auth_status.className = "px-3 py-1 rounded-full border border-slate-700 text-xs text-emerald-300";
+      }
+
+      function spotifyRenderSelected() {
+        if (!spotify_selected_artist && !spotify_selected_track) {
+          spotify_selected_values.textContent = "Nada selecionado ainda.";
+          return;
+        }
+
+        const artist_html = spotify_selected_artist ?
+          `<div><strong>Artista:</strong> ${escapeHtml(spotify_selected_artist.name)}</div>` :
+          `<div><strong>Artista:</strong> (não selecionado)</div>`;
+
+        const track_html = spotify_selected_track ?
+          `<div><strong>Música:</strong> ${escapeHtml(spotify_selected_track.name)}</div>` :
+          `<div><strong>Música:</strong> (não selecionada)</div>`;
+
+        spotify_selected_values.innerHTML = `${artist_html}${track_html}`;
+      }
+
+      function spotifyRenderArtistResults(artists) {
+        spotify_artist_results.innerHTML = "";
+
+        if (!artists.length) {
+          spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Nenhum artista encontrado.</div>`;
+          return;
+        }
+
+        for (const artist of artists) {
+          const image_url = artist.images?.[2]?.url || artist.images?.[1]?.url || artist.images?.[0]?.url || "";
+          const item = document.createElement("div");
+          item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
+          item.innerHTML = `
+            <img alt="" src="${escapeHtml(image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
+            <div class="flex-1">
+              <div class="font-semibold">${escapeHtml(artist.name)}</div>
+              <div class="text-xs text-slate-400">Popularidade: ${escapeHtml(artist.popularity ?? "—")}</div>
+            </div>
+            <button class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700">Escolher</button>
+          `;
+          item.querySelector("button").addEventListener("click", () => {
+            spotifySelectArtist({
+              id: artist.id,
+              name: artist.name
+            });
+          });
+          spotify_artist_results.appendChild(item);
+        }
+      }
+
+      function spotifyRenderTrackResults(tracks) {
+        spotify_track_results.innerHTML = "";
+
+        if (!tracks.length) {
+          spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Não encontrei top tracks.</div>`;
+          return;
+        }
+
+        for (const track of tracks) {
+          const album_image_url = track.album?.images?.[2]?.url || track.album?.images?.[1]?.url || track.album?.images?.[0]?.url || "";
+          const item = document.createElement("div");
+          item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
+          item.innerHTML = `
+            <img alt="" src="${escapeHtml(album_image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
+            <div class="flex-1">
+              <div class="font-semibold">${escapeHtml(track.name)}</div>
+              <div class="text-xs text-slate-400">${escapeHtml(track.album?.name || "")}</div>
+            </div>
+            <button class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold">Escolher</button>
+          `;
+          item.querySelector("button").addEventListener("click", () => {
+            spotifySelectTrack({
+              id: track.id,
+              name: track.name
+            });
+          });
+          spotify_track_results.appendChild(item);
+        }
+      }
+
+      async function spotifySearchArtist() {
+        const query = spotify_artist_query.value.trim();
+        spotify_artist_results.innerHTML = "";
+        spotify_track_results.innerHTML = "";
+        spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
+        spotify_selected_artist = null;
+        spotify_selected_track = null;
+        spotifyRenderSelected();
+        updateSubmitEnabled();
+
+        if (!query) {
+          spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Digite um nome pra buscar.</div>`;
+          return;
+        }
+
+        try {
+          const url = new URL(`${spotify_api_base}/search`);
+          url.searchParams.set("q", query);
+          url.searchParams.set("type", "artist");
+          url.searchParams.set("limit", "10");
+          const response_json = await spotifyApiFetch(url.toString());
+          const artists = response_json?.artists?.items || [];
+          spotifyRenderArtistResults(artists);
+        } catch (error) {
+          spotify_artist_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
+        }
+      }
+
+      async function spotifyFetchTopTracks(artist_name) {
+        try {
+          const url = new URL(`${spotify_api_base}/search`);
+          url.searchParams.set("q", `artist:"${artist_name}"`);
+          url.searchParams.set("type", "track");
+          url.searchParams.set("limit", "10");
+          url.searchParams.set("market", "BR");
+
+          const response_json = await spotifyApiFetch(url.toString());
+          const tracks = response_json?.tracks?.items || [];
+          spotifyRenderTrackResults(tracks);
+        } catch (error) {
+          spotify_track_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
+        }
+      }
+
+      function spotifySelectArtist(artist) {
+        spotify_selected_artist = artist;
+        spotify_selected_track = null;
+        spotify_selected_artist_label.innerHTML = `Artista selecionado: <strong>${escapeHtml(artist.name)}</strong>`;
+        spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Buscando músicas...</div>`;
+        spotifyRenderSelected();
+        updateSubmitEnabled();
+
+        spotifyFetchTracksByArtistName(artist.name);
+      }
+
+      function spotifySelectTrack(track) {
+        spotify_selected_track = track;
+        spotifyRenderSelected();
+        updateSubmitEnabled();
+      }
+
+      function spotifyLogout() {
+        spotify_selected_artist = null;
+        spotify_selected_track = null;
+        spotify_artist_results.innerHTML = "";
+        spotify_track_results.innerHTML = "";
+        spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
+        spotify_selected_values.textContent = "Nada selecionado ainda.";
+        spotifyUpdateAuthUi();
+        updateSubmitEnabled();
+      }
+
+      spotify_artist_search_button.addEventListener("click", spotifySearchArtist);
+      spotify_artist_query.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !spotify_artist_search_button.disabled) spotifySearchArtist();
+      });
+
+      // Admin unlock + mode toggle
+      document.addEventListener("keydown", async (event) => {
+        const is_toggle_shortcut = event.ctrlKey && event.altKey && (event.key === "p" || event.key === "P");
+        const is_dashboard_shortcut = event.ctrlKey && event.altKey && (event.key === "d" || event.key === "D");
+        if (!is_toggle_shortcut && !is_dashboard_shortcut) return;
+
+        event.preventDefault();
+
+        if (is_dashboard_shortcut) {
+          if (!admin_unlocked) {
+            alert("Destrave o admin primeiro (Ctrl + Alt + P).");
+            return;
+          }
+          window.open("admin/index.php", "_blank");
+          return;
+        }
+
+        if (admin_unlocked) {
+          entry_mode = entry_mode === "manual" ? "spotify" : "manual";
+          updateEntryModeUi();
+          return;
+        }
+
+        const password = window.prompt("Senha admin:");
+        if (!password) return;
+
+        try {
+          const response = await fetch("admin/unlock.php", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              password
+            })
+          });
+          const data = await response.json();
+          if (!data.ok) {
+            alert("Senha inválida");
+            return;
+          }
+          setAdminUnlocked(true);
+          entry_mode = entry_mode === "manual" ? "spotify" : "manual";
+          updateEntryModeUi();
+        } catch {
+          alert("Falha ao validar senha");
+        }
+      });
+
+      // Init
+      setScreen("idle");
+      fetchHealth();
+
+      (async () => {
+        spotifyUpdateAuthUi();
+
+        try {
+          await loadCompositorConfig();
+        } catch (error) {
+          idle_health.textContent = String(error && error.message ? error.message : error);
+        }
+
+        updateEntryModeUi();
+      })();
+    })();
+  </script>
 </body>
+
 </html>

@@ -143,37 +143,79 @@ function safeTrimToMaxChars(string $value, int $max_chars): string
     return substr($value, 0, $max_chars);
 }
 
-function runCommandOrThrow(array $command_parts): string
+function resolveImagemagickBinary(array $compositor_config): string
 {
-    $escaped = array_map('escapeshellarg', $command_parts);
-    $command = implode(' ', $escaped);
+    // 1) Allow environment override
+    $env_path = getenv('IMAGEMAGICK_BINARY');
+    if (is_string($env_path) && trim($env_path) !== '') {
+        return trim($env_path);
+    }
 
+    // 2) Config override
+    $configured_path = (string)($compositor_config['imagemagick_binary_path'] ?? '');
+    if (trim($configured_path) !== '') {
+        return trim($configured_path);
+    }
+
+    // 3) Fallback: rely on PATH
+    return 'magick';
+}
+
+function normalizeProcessOutput(string $value): string
+{
+    $value = trim($value);
+
+    // Help Windows console output become valid UTF-8 for JSON
+    if (function_exists('mb_convert_encoding')) {
+        $converted = @mb_convert_encoding($value, 'UTF-8', 'UTF-8, Windows-1252, ISO-8859-1');
+        if (is_string($converted) && $converted !== '') {
+            return $converted;
+        }
+    }
+
+    return $value;
+}
+
+function runCommandOrThrow(array $command_parts, ?string $working_directory = null): string
+{
     $descriptor_spec = [
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
     ];
 
-    $process = proc_open($command, $descriptor_spec, $pipes);
+    $options = [
+        'bypass_shell' => true, // Important on Windows paths with spaces
+    ];
+
+    $process = @proc_open($command_parts, $descriptor_spec, $pipes, $working_directory, null, $options);
     if (!is_resource($process)) {
-        throw new RuntimeException('Failed to start ImageMagick process.');
+        $debug_command = implode(' ', array_map('strval', $command_parts));
+        throw new RuntimeException('Failed to start ImageMagick process. Command: ' . $debug_command);
     }
 
-    $stdout = stream_get_contents($pipes[1]);
-    $stderr = stream_get_contents($pipes[2]);
+    $stdout = stream_get_contents($pipes[1]) ?: '';
+    $stderr = stream_get_contents($pipes[2]) ?: '';
     fclose($pipes[1]);
     fclose($pipes[2]);
 
     $exit_code = proc_close($process);
+
+    $stdout = normalizeProcessOutput($stdout);
+    $stderr = normalizeProcessOutput($stderr);
+
     if ($exit_code !== 0) {
-        throw new RuntimeException('ImageMagick error: ' . trim((string)$stderr));
+        $debug_command = implode(' ', array_map('strval', $command_parts));
+        $combined_output = trim($stderr !== '' ? $stderr : $stdout);
+        throw new RuntimeException('ImageMagick error (exit ' . $exit_code . '): ' . $combined_output . ' | Command: ' . $debug_command);
     }
 
-    return trim((string)$stdout);
+    return trim($stdout);
 }
 
-function detectImageSize(string $image_path): array
+function detectImageSize(array $compositor_config, string $image_path): array
 {
-    $output = runCommandOrThrow(['/opt/imagemagick/bin/magick', 'identify', '-format', '%w %h', $image_path]);
+    $magick_binary = resolveImagemagickBinary($compositor_config);
+    $output = runCommandOrThrow([$magick_binary, 'identify', '-format', '%w %h', $image_path]);
     $parts = preg_split('/\s+/', trim($output));
     if (!is_array($parts) || count($parts) < 2) {
         throw new RuntimeException('Failed to detect image size.');
@@ -185,10 +227,11 @@ function detectImageSize(string $image_path): array
     ];
 }
 
-function measureTextSize(string $text, string $font_file_path, int $font_size): array
+function measureTextSize(array $compositor_config, string $text, string $font_file_path, int $font_size): array
 {
+    $magick_binary = resolveImagemagickBinary($compositor_config);
     $output = runCommandOrThrow([
-        '/opt/imagemagick/bin/magick',
+        $magick_binary,
         '-background', 'none',
         '-fill', 'black',
         '-font', $font_file_path,
@@ -209,13 +252,13 @@ function measureTextSize(string $text, string $font_file_path, int $font_size): 
     ];
 }
 
-function fitFontSizeForBox(string $text, string $font_file_path, int $initial_font_size, int $box_width, int $box_height): int
+function fitFontSizeForBox(array $compositor_config, string $text, string $font_file_path, int $initial_font_size, int $box_width, int $box_height): int
 {
     $font_size = $initial_font_size;
     $min_font_size = 10;
 
     while ($font_size > $min_font_size) {
-        $size = measureTextSize($text, $font_file_path, $font_size);
+        $size = measureTextSize($compositor_config, $text, $font_file_path, $font_size);
         if ($size['width'] <= ($box_width - 8) && $size['height'] <= ($box_height - 4)) {
             break;
         }
@@ -225,39 +268,38 @@ function fitFontSizeForBox(string $text, string $font_file_path, int $initial_fo
     return $font_size;
 }
 
-function buildTextImage(string $text, array $box, string $font_file_path, int $font_size, array $color_rgb, string $output_path): void
+function buildTextImage(array $compositor_config, string $text, array $box, string $font_file_path, int $font_size, array $color_rgb, string $output_path): void
 {
+    $magick_binary = resolveImagemagickBinary($compositor_config);
+
     $box_w = (int)$box['width'];
     $box_h = (int)$box['height'];
 
     if ($text === '') {
-        runCommandOrThrow([
-            '/opt/imagemagick/bin/magick',
-            '-size', (string)$box_w . 'x' . (string)$box_h,
-            'xc:none',
-            $output_path
-        ]);
+        runCommandOrThrow([$magick_binary, '-size', $box_w . 'x' . $box_h, 'xc:none', $output_path]);
         return;
     }
 
-    $fitted_font_size = fitFontSizeForBox($text, $font_file_path, $font_size, $box_w, $box_h);
+    $fitted_font_size = fitFontSizeForBox($compositor_config, $text, $font_file_path, $font_size, $box_w, $box_h);
     $fill = sprintf('rgb(%d,%d,%d)', (int)$color_rgb['r'], (int)$color_rgb['g'], (int)$color_rgb['b']);
 
     runCommandOrThrow([
-        '/opt/imagemagick/bin/magick',
+        $magick_binary,
         '-background', 'none',
         '-fill', $fill,
         '-font', $font_file_path,
         '-pointsize', (string)$fitted_font_size,
         'label:' . $text,
         '-gravity', 'center',
-        '-extent', (string)$box_w . 'x' . (string)$box_h,
+        '-extent', $box_w . 'x' . $box_h,
         $output_path
     ]);
 }
 
-function buildProcessedPhoto(string $photo_path, array $photo_box, float $oversize_factor, string $output_path): void
+function buildProcessedPhoto(array $compositor_config, string $photo_path, array $photo_box, float $oversize_factor, string $output_path): void
 {
+    $magick_binary = resolveImagemagickBinary($compositor_config);
+
     $target_w = (int)$photo_box['width'];
     $target_h = (int)$photo_box['height'];
 
@@ -265,14 +307,14 @@ function buildProcessedPhoto(string $photo_path, array $photo_box, float $oversi
     $oversize_h = (int)round($target_h * max(1.0, $oversize_factor));
 
     runCommandOrThrow([
-        '/opt/imagemagick/bin/magick',
+        $magick_binary,
         $photo_path,
         '-auto-orient',
-        '-resize', (string)$oversize_w . 'x' . (string)$oversize_h . '^',
+        '-resize', $oversize_w . 'x' . $oversize_h . '^',
         '-gravity', 'center',
-        '-extent', (string)$oversize_w . 'x' . (string)$oversize_h,
+        '-extent', $oversize_w . 'x' . $oversize_h,
         '-gravity', 'center',
-        '-crop', (string)$target_w . 'x' . (string)$target_h . '+0+0',
+        '-crop', $target_w . 'x' . $target_h . '+0+0',
         '+repage',
         $output_path
     ]);
@@ -280,11 +322,12 @@ function buildProcessedPhoto(string $photo_path, array $photo_box, float $oversi
 
 function composeFinalImageDataUrl(array $compositor_config, string $photo_data_url, string $person_name, string $artist_name, string $track_name, bool $preview_only): array
 {
+    $magick_binary = resolveImagemagickBinary($compositor_config);
     $frame_info = chooseNextFrameFile($compositor_config, $preview_only);
     $frame_file_path = (string)$frame_info['frame_file_path'];
     $frame_file_name = (string)$frame_info['frame_file_name'];
 
-    $size = detectImageSize($frame_file_path);
+    $size = detectImageSize($compositor_config, $frame_file_path);
     $width = (int)$size['width'];
     $height = (int)$size['height'];
 
@@ -356,11 +399,11 @@ function composeFinalImageDataUrl(array $compositor_config, string $photo_data_u
 
         $photo_box = (array)$compositor_config['photo_box'];
         $oversize_factor = (float)($photo_box['oversize_factor'] ?? 1.0);
-        buildProcessedPhoto($photo_tmp_path_with_ext, $photo_box, $oversize_factor, $processed_photo_path);
+        buildProcessedPhoto($compositor_config, $photo_tmp_path_with_ext, $photo_box, $oversize_factor, $processed_photo_path);
 
-        buildTextImage($person_text, (array)$person_cfg['box'], $font_file_path, (int)($person_cfg['font_size'] ?? 24), $color_rgb, $person_text_path);
-        buildTextImage($artist_text, (array)$artist_cfg['box'], $font_file_path, (int)($artist_cfg['font_size'] ?? 18), $color_rgb, $artist_text_path);
-        buildTextImage($track_text, (array)$track_cfg['box'], $font_file_path, (int)($track_cfg['font_size'] ?? 18), $color_rgb, $track_text_path);
+        buildTextImage($compositor_config, $person_text, (array)$person_cfg['box'], $font_file_path, (int)($person_cfg['font_size'] ?? 24), $color_rgb, $person_text_path);
+        buildTextImage($compositor_config, $artist_text, (array)$artist_cfg['box'], $font_file_path, (int)($artist_cfg['font_size'] ?? 18), $color_rgb, $artist_text_path);
+        buildTextImage($compositor_config, $track_text, (array)$track_cfg['box'], $font_file_path, (int)($track_cfg['font_size'] ?? 18), $color_rgb, $track_text_path);
 
         $photo_x = (int)$photo_box['x'];
         $photo_y = (int)$photo_box['y'];
@@ -370,7 +413,7 @@ function composeFinalImageDataUrl(array $compositor_config, string $photo_data_u
         $track_box = (array)$track_cfg['box'];
 
         runCommandOrThrow([
-            '/opt/imagemagick/bin/magick',
+            $magick_binary,
             '-size', (string)$width . 'x' . (string)$height,
             'xc:none',
             $processed_photo_path,

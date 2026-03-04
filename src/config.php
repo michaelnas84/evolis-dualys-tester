@@ -24,4 +24,7 @@ return [
         'width_mm' => 85.6,
         'height_mm' => 53.98,
     ],
+
+    'spotify_client_id' => '1e0ca3980285487bb2eecd0f8899e9d6',
+    'spotify_client_secret' => '63c825e71737481a8db073c60e2073eb',
 ];
