@@ -16,48 +16,37 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Card Kiosk</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-sha256@0.11.0/build/sha256.min.js"></script>
 </head>
-<body class="h-screen bg-slate-950 text-slate-100 select-none">
-  <div class="h-full w-full flex items-center justify-center">
-    <div class="w-full max-w-4xl px-6">
+<body class="h-screen bg-slate-950 text-slate-100 select-none overflow-hidden">
 
-      <!-- IDLE -->
-      <div id="screen_idle" class="text-center">
-        <div class="text-4xl sm:text-5xl font-semibold">Toque para começar</div>
-        <div class="mt-4 text-slate-300">Foto para impressão em cartão</div>
-        <button id="idle_start_button" class="mt-10 px-6 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold">
-          Iniciar
-        </button>
-        <div id="idle_health" class="mt-6 text-sm text-slate-400"></div>
+  <div class="h-full w-full">
+
+    <!-- IDLE -->
+    <div id="screen_idle" class="h-full w-full relative">
+      <div class="absolute inset-0">
+        <img id="idle_background" src="frames/frame-01.png" alt="" class="h-full w-full object-cover opacity-40" />
       </div>
-
-      <!-- MODE SELECT -->
-      <div id="screen_mode" class="hidden">
-        <div class="text-3xl font-semibold text-center">Escolha o modo</div>
-        <div class="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <button id="mode_front_only" class="p-6 rounded-2xl bg-slate-800 hover:bg-slate-700 text-left">
-            <div class="text-2xl font-semibold">Só frente</div>
-            <div class="mt-2 text-slate-300">Captura uma foto</div>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <div class="text-center px-6">
+          <div class="text-4xl sm:text-5xl font-semibold">Toque para começar</div>
+          <div class="mt-4 text-slate-300">Foto + nome + música</div>
+          <button id="idle_start_button" class="mt-10 px-6 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold">
+            Iniciar
           </button>
-          <button id="mode_front_and_back" class="p-6 rounded-2xl bg-slate-800 hover:bg-slate-700 text-left">
-            <div class="text-2xl font-semibold">Frente e verso</div>
-            <div class="mt-2 text-slate-300">Captura duas fotos</div>
-          </button>
-        </div>
-
-        <div class="mt-8 flex justify-center">
-          <button id="mode_cancel_button" class="px-5 py-3 rounded-xl bg-slate-900 border border-slate-700">
-            Cancelar
-          </button>
+          <div id="idle_health" class="mt-6 text-sm text-slate-400"></div>
+          <div class="mt-3 text-xs text-slate-500">Atalho admin: Ctrl + Alt + P</div>
         </div>
       </div>
+    </div>
 
-      <!-- CAPTURE -->
-      <div id="screen_capture" class="hidden">
-        <div class="flex items-center justify-between gap-4">
+    <!-- CAPTURE -->
+    <div id="screen_capture" class="hidden h-full w-full">
+      <div class="h-full w-full flex flex-col">
+        <div class="px-6 pt-6 flex items-center justify-between gap-4">
           <div>
-            <div id="capture_title" class="text-3xl font-semibold">Capturar</div>
-            <div id="capture_subtitle" class="mt-1 text-slate-300">Ajuste e tire a foto</div>
+            <div class="text-3xl font-semibold">Tire sua foto</div>
+            <div class="mt-1 text-slate-300">Centralize o rosto</div>
           </div>
           <div class="text-right">
             <div class="text-sm text-slate-400">Inatividade</div>
@@ -65,80 +54,141 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          <div class="rounded-2xl overflow-hidden bg-slate-900 border border-slate-800">
-            <video id="camera_video" class="w-full h-auto" autoplay playsinline muted></video>
+        <div class="flex-1 px-6 py-6 flex items-center justify-center">
+          <div id="preview_container" class="relative w-full max-w-md rounded-2xl overflow-hidden bg-black border border-slate-800" style="aspect-ratio: 1 / 1;">
+            <video id="camera_video" class="absolute inset-0 h-full w-full object-cover" autoplay playsinline muted></video>
+            <img id="captured_image" class="absolute inset-0 h-full w-full object-cover hidden" alt="Foto" />
+
+            <div id="countdown_overlay" class="hidden absolute inset-0 flex items-center justify-center">
+              <div class="text-7xl font-extrabold bg-black/40 px-8 py-4 rounded-2xl">3</div>
+            </div>
           </div>
+        </div>
 
-          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4">
-            <div class="text-sm text-slate-400">Pré-visualização (aspecto CR80)</div>
-            <canvas id="preview_canvas" class="mt-3 w-full rounded-xl bg-black"></canvas>
+        <div class="px-6 pb-8">
+          <div class="flex flex-wrap gap-3 justify-center">
+            <button id="capture_button" class="px-8 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold">
+              Tirar foto
+            </button>
+            <button id="retake_button" class="hidden px-8 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-xl font-semibold">
+              Refazer
+            </button>
+            <button id="proceed_button" class="hidden px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xl font-semibold">
+              Prosseguir
+            </button>
+            <button id="switch_camera_button" class="px-6 py-4 rounded-2xl bg-slate-900 border border-slate-700">
+              Trocar câmera
+            </button>
+            <button id="capture_cancel_button" class="px-6 py-4 rounded-2xl bg-slate-900 border border-slate-700">
+              Cancelar
+            </button>
+          </div>
+          <div id="capture_error" class="mt-4 text-center text-sm text-rose-300"></div>
+        </div>
+      </div>
+    </div>
 
-            <div class="mt-4 flex flex-wrap gap-3">
-              <button id="capture_button" class="px-5 py-3 rounded-xl bg-white text-slate-900 font-semibold">
-                Capturar
-              </button>
-              <button id="switch_camera_button" class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700">
-                Trocar câmera
-              </button>
-              <label class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 cursor-pointer">
-                <input id="upload_input" type="file" accept="image/*" class="hidden" />
-                Enviar imagem
-              </label>
-              <button id="capture_cancel_button" class="px-5 py-3 rounded-xl bg-slate-900 border border-slate-700">
-                Cancelar
-              </button>
+    <!-- FORM -->
+    <div id="screen_form" class="hidden h-full w-full">
+      <div class="h-full w-full flex flex-col">
+        <div class="px-6 pt-6 flex items-start justify-between gap-4">
+          <div>
+            <div class="text-3xl font-semibold">Preencha</div>
+            <div class="mt-1 text-slate-300">Nome + artista + música</div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm text-slate-400">Modo</div>
+            <div id="entry_mode_label" class="text-xl font-semibold">Manual</div>
+            <div id="admin_unlocked_label" class="mt-1 text-xs text-slate-500 hidden">Admin destravado</div>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-auto px-6 py-6">
+          <div class="w-full max-w-4xl mx-auto">
+            <div class="grid grid-cols-1 gap-4">
+              <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4">
+                <label class="text-sm text-slate-300">Nome</label>
+                <input id="person_name_input" class="mt-2 w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Digite seu nome" maxlength="40" />
+                <div id="person_name_counter" class="mt-2 text-xs text-slate-400"></div>
+              </div>
+
+              <div id="panel_manual" class="rounded-2xl bg-slate-900 border border-slate-800 p-4">
+                <div class="flex items-center justify-between">
+                  <div class="text-lg font-semibold">Manual</div>
+                  <div class="text-xs text-slate-500">Ctrl + Alt + P para alternar (admin)</div>
+                </div>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="text-sm text-slate-300">Artista</label>
+                    <input id="manual_artist_input" class="mt-2 w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Ex.: Imagine Dragons" maxlength="40" />
+                    <div id="artist_counter" class="mt-2 text-xs text-slate-400"></div>
+                  </div>
+                  <div>
+                    <label class="text-sm text-slate-300">Música</label>
+                    <input id="manual_track_input" class="mt-2 w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Ex.: Believer" maxlength="40" />
+                    <div id="track_counter" class="mt-2 text-xs text-slate-400"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="panel_spotify" class="hidden rounded-2xl bg-slate-900 border border-slate-800 p-4">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <div class="text-lg font-semibold">Spotify</div>
+                    <div class="text-xs text-slate-400">Login fica salvo no navegador</div>
+                  </div>
+                  <div class="flex gap-2 items-center">
+                    <button id="spotify_login_button" class="px-4 py-2 rounded-xl bg-white text-slate-900 font-semibold">Entrar</button>
+                    <button id="spotify_logout_button" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700" disabled>Sair</button>
+                    <span id="spotify_auth_status" class="px-3 py-1 rounded-full border border-slate-700 text-xs text-slate-300">Deslogado</span>
+                  </div>
+                </div>
+
+                <div class="mt-4">
+                  <div class="flex gap-2 flex-wrap">
+                    <input id="spotify_artist_query" class="flex-1 min-w-[240px] px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Buscar artista" />
+                    <button id="spotify_artist_search_button" class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700" disabled>Buscar</button>
+                  </div>
+                  <div id="spotify_artist_results" class="mt-4 grid gap-2"></div>
+                </div>
+
+                <div class="mt-6">
+                  <div id="spotify_selected_artist_label" class="text-sm text-slate-300">Nenhum artista selecionado.</div>
+                  <div id="spotify_track_results" class="mt-4 grid gap-2"></div>
+                </div>
+
+                <div class="mt-6 rounded-xl bg-slate-950 border border-slate-800 p-4">
+                  <div class="text-sm text-slate-300">Selecionado</div>
+                  <div id="spotify_selected_values" class="mt-2 text-sm text-slate-400">Nada selecionado ainda.</div>
+                </div>
+              </div>
             </div>
 
-            <div id="capture_error" class="mt-4 text-sm text-rose-300"></div>
+            <div class="mt-6 flex flex-wrap justify-center gap-3">
+              <button id="form_back_button" class="px-6 py-4 rounded-2xl bg-slate-900 border border-slate-700 text-xl font-semibold">
+                Voltar
+              </button>
+              <button id="submit_button" class="px-8 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold" disabled>
+                Enviar para impressão
+              </button>
+            </div>
+            <div id="form_error" class="mt-4 text-center text-sm text-rose-300"></div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- REVIEW -->
-      <div id="screen_review" class="hidden">
-        <div class="text-3xl font-semibold text-center">Revisar</div>
-
-        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4">
-            <div class="text-sm text-slate-400">Frente</div>
-            <img id="front_preview_image" class="mt-3 w-full rounded-xl bg-black object-contain" alt="Frente" />
-            <button id="retake_front_button" class="mt-4 w-full px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700">
-              Refazer frente
-            </button>
-          </div>
-
-          <div id="back_review_panel" class="rounded-2xl bg-slate-900 border border-slate-800 p-4 hidden">
-            <div class="text-sm text-slate-400">Verso</div>
-            <img id="back_preview_image" class="mt-3 w-full rounded-xl bg-black object-contain" alt="Verso" />
-            <button id="retake_back_button" class="mt-4 w-full px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700">
-              Refazer verso
-            </button>
-          </div>
-        </div>
-
-        <div class="mt-8 flex flex-wrap justify-center gap-3">
-          <button id="submit_button" class="px-6 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold">
-            Enviar para impressão
-          </button>
-          <button id="review_cancel_button" class="px-5 py-3 rounded-xl bg-slate-900 border border-slate-700">
-            Cancelar
-          </button>
-        </div>
-
-        <div id="review_error" class="mt-4 text-center text-sm text-rose-300"></div>
-      </div>
-
-      <!-- STATUS -->
-      <div id="screen_status" class="hidden text-center">
+    <!-- STATUS -->
+    <div id="screen_status" class="hidden h-full w-full flex items-center justify-center">
+      <div class="text-center px-6">
         <div id="status_title" class="text-3xl font-semibold">Processando...</div>
         <div id="status_message" class="mt-3 text-slate-300"></div>
         <button id="status_done_button" class="mt-10 px-6 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold hidden">
           Voltar ao início
         </button>
       </div>
-
     </div>
+
   </div>
 
 <script>
@@ -147,79 +197,116 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
   const api_create_job_url = "api/create_job.php";
   const api_health_url = "api/health.php";
-
-  const card_aspect_ratio = 85.6 / 53.98;
+  const api_get_compositor_config_url = "api/get_compositor_config.php";
+  const api_compose_image_url = "api/compose_image.php";
 
   const idle_timeout_seconds = 60;
   let idle_seconds_left = idle_timeout_seconds;
   let idle_interval_id = null;
+
+  let compositor_config = null;
+  let preview_aspect_ratio = 1;
 
   let current_stream = null;
   let current_device_id = null;
   let available_video_devices = [];
   let camera_ready = false;
 
-  let print_mode = null; // "front_only" | "front_and_back"
-  let capture_side = null; // "front" | "back"
-  let front_image_data_url = null;
-  let back_image_data_url = null;
+  let captured_photo_data_url = null;
+  let entry_mode = "manual"; // manual | spotify
+  let admin_unlocked = false;
+  let countdown_interval_id = null;
+
+  // Spotify state
+  let spotify_selected_artist = null;
+  let spotify_selected_track = null;
 
   const screen_idle = document.getElementById("screen_idle");
-  const screen_mode = document.getElementById("screen_mode");
   const screen_capture = document.getElementById("screen_capture");
-  const screen_review = document.getElementById("screen_review");
+  const screen_form = document.getElementById("screen_form");
   const screen_status = document.getElementById("screen_status");
 
   const idle_start_button = document.getElementById("idle_start_button");
   const idle_health = document.getElementById("idle_health");
 
-  const mode_front_only = document.getElementById("mode_front_only");
-  const mode_front_and_back = document.getElementById("mode_front_and_back");
-  const mode_cancel_button = document.getElementById("mode_cancel_button");
-
   const camera_video = document.getElementById("camera_video");
-  const preview_canvas = document.getElementById("preview_canvas");
+  const preview_container = document.getElementById("preview_container");
+  const captured_image = document.getElementById("captured_image");
   const capture_button = document.getElementById("capture_button");
+  const retake_button = document.getElementById("retake_button");
+  const proceed_button = document.getElementById("proceed_button");
   const switch_camera_button = document.getElementById("switch_camera_button");
-  const upload_input = document.getElementById("upload_input");
   const capture_cancel_button = document.getElementById("capture_cancel_button");
-  const capture_title = document.getElementById("capture_title");
-  const capture_subtitle = document.getElementById("capture_subtitle");
-  const capture_error = document.getElementById("capture_error");
+  const countdown_overlay = document.getElementById("countdown_overlay");
   const idle_countdown = document.getElementById("idle_countdown");
+  const capture_error = document.getElementById("capture_error");
 
-  const front_preview_image = document.getElementById("front_preview_image");
-  const back_preview_image = document.getElementById("back_preview_image");
-  const back_review_panel = document.getElementById("back_review_panel");
-  const retake_front_button = document.getElementById("retake_front_button");
-  const retake_back_button = document.getElementById("retake_back_button");
+  const entry_mode_label = document.getElementById("entry_mode_label");
+  const admin_unlocked_label = document.getElementById("admin_unlocked_label");
+
+  const person_name_input = document.getElementById("person_name_input");
+  const person_name_counter = document.getElementById("person_name_counter");
+  const panel_manual = document.getElementById("panel_manual");
+  const panel_spotify = document.getElementById("panel_spotify");
+  const manual_artist_input = document.getElementById("manual_artist_input");
+  const manual_track_input = document.getElementById("manual_track_input");
+  const artist_counter = document.getElementById("artist_counter");
+  const track_counter = document.getElementById("track_counter");
+  const form_back_button = document.getElementById("form_back_button");
   const submit_button = document.getElementById("submit_button");
-  const review_cancel_button = document.getElementById("review_cancel_button");
-  const review_error = document.getElementById("review_error");
+  const form_error = document.getElementById("form_error");
+
+  const spotify_login_button = document.getElementById("spotify_login_button");
+  const spotify_logout_button = document.getElementById("spotify_logout_button");
+  const spotify_auth_status = document.getElementById("spotify_auth_status");
+  const spotify_artist_query = document.getElementById("spotify_artist_query");
+  const spotify_artist_search_button = document.getElementById("spotify_artist_search_button");
+  const spotify_artist_results = document.getElementById("spotify_artist_results");
+  const spotify_selected_artist_label = document.getElementById("spotify_selected_artist_label");
+  const spotify_track_results = document.getElementById("spotify_track_results");
+  const spotify_selected_values = document.getElementById("spotify_selected_values");
 
   const status_title = document.getElementById("status_title");
   const status_message = document.getElementById("status_message");
   const status_done_button = document.getElementById("status_done_button");
 
   function setScreen(screen_name) {
-    const screens = [screen_idle, screen_mode, screen_capture, screen_review, screen_status];
+    const screens = [screen_idle, screen_capture, screen_form, screen_status];
     for (const screen of screens) {
       screen.classList.add("hidden");
     }
     if (screen_name === "idle") screen_idle.classList.remove("hidden");
-    if (screen_name === "mode") screen_mode.classList.remove("hidden");
     if (screen_name === "capture") screen_capture.classList.remove("hidden");
-    if (screen_name === "review") screen_review.classList.remove("hidden");
+    if (screen_name === "form") screen_form.classList.remove("hidden");
     if (screen_name === "status") screen_status.classList.remove("hidden");
   }
 
   function resetState() {
-    print_mode = null;
-    capture_side = null;
-    front_image_data_url = null;
-    back_image_data_url = null;
-    review_error.textContent = "";
     capture_error.textContent = "";
+    form_error.textContent = "";
+
+    captured_photo_data_url = null;
+    captured_image.src = "";
+    captured_image.classList.add("hidden");
+    camera_video.classList.remove("hidden");
+
+    capture_button.disabled = false;
+    capture_button.classList.remove("opacity-60");
+    retake_button.classList.add("hidden");
+    proceed_button.classList.add("hidden");
+
+    person_name_input.value = "";
+    manual_artist_input.value = "";
+    manual_track_input.value = "";
+
+    spotify_selected_artist = null;
+    spotify_selected_track = null;
+    spotify_artist_results.innerHTML = "";
+    spotify_track_results.innerHTML = "";
+    spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
+    spotify_selected_values.textContent = "Nada selecionado ainda.";
+
+    updateSubmitEnabled();
   }
 
   function resetIdleTimer() {
@@ -269,40 +356,9 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     }
   }
 
-  function setCanvasSizeForCard() {
-    const target_width = 1200;
-    const target_height = Math.round(target_width / card_aspect_ratio);
-    preview_canvas.width = target_width;
-    preview_canvas.height = target_height;
-  }
-
-  function drawPreviewFrame() {
-    if (!camera_ready) return;
-
-    const ctx = preview_canvas.getContext("2d");
-    const video_width = camera_video.videoWidth || 0;
-    const video_height = camera_video.videoHeight || 0;
-
-    if (video_width === 0 || video_height === 0) return;
-
-    const video_aspect_ratio = video_width / video_height;
-    let source_x = 0;
-    let source_y = 0;
-    let source_w = video_width;
-    let source_h = video_height;
-
-    if (video_aspect_ratio > card_aspect_ratio) {
-      // Crop width
-      source_w = Math.round(video_height * card_aspect_ratio);
-      source_x = Math.round((video_width - source_w) / 2);
-    } else {
-      // Crop height
-      source_h = Math.round(video_width / card_aspect_ratio);
-      source_y = Math.round((video_height - source_h) / 2);
-    }
-
-    ctx.drawImage(camera_video, source_x, source_y, source_w, source_h, 0, 0, preview_canvas.width, preview_canvas.height);
-    requestAnimationFrame(drawPreviewFrame);
+  function setPreviewAspectRatio(aspect_ratio) {
+    preview_aspect_ratio = aspect_ratio;
+    preview_container.style.aspectRatio = String(aspect_ratio);
   }
 
   async function enumerateVideoDevices() {
@@ -336,7 +392,6 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     });
 
     camera_ready = true;
-    requestAnimationFrame(drawPreviewFrame);
   }
 
   function stopCamera() {
@@ -351,67 +406,187 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   }
 
   function captureCurrentFrameAsJpegDataUrl() {
-    const data_url = preview_canvas.toDataURL("image/jpeg", 0.92);
-    return data_url;
-  }
-
-  async function loadFileAsDataUrl(file) {
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error("Falha ao ler arquivo."));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function startCapture(side) {
-    capture_side = side;
-
-    const label = side === "front" ? "Frente" : "Verso";
-    capture_title.textContent = "Capturar: " + label;
-    capture_subtitle.textContent = "Centralize o rosto e capture";
-
-    setCanvasSizeForCard();
-    setScreen("capture");
-    startIdleTimer();
-    resetIdleTimer();
-  }
-
-  function showReview() {
-    stopIdleTimer();
-    stopCamera();
-
-    front_preview_image.src = front_image_data_url || "";
-    if (print_mode === "front_and_back") {
-      back_review_panel.classList.remove("hidden");
-      back_preview_image.src = back_image_data_url || "";
-    } else {
-      back_review_panel.classList.add("hidden");
-      back_preview_image.src = "";
+    const video_width = camera_video.videoWidth || 0;
+    const video_height = camera_video.videoHeight || 0;
+    if (video_width === 0 || video_height === 0) {
+      throw new Error("Câmera ainda não está pronta.");
     }
 
-    setScreen("review");
+    const target_width = 900;
+    const target_height = Math.round(target_width / preview_aspect_ratio);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = target_width;
+    canvas.height = target_height;
+
+    const ctx = canvas.getContext("2d");
+
+    const video_aspect_ratio = video_width / video_height;
+    let source_x = 0;
+    let source_y = 0;
+    let source_w = video_width;
+    let source_h = video_height;
+
+    if (video_aspect_ratio > preview_aspect_ratio) {
+      source_w = Math.round(video_height * preview_aspect_ratio);
+      source_x = Math.round((video_width - source_w) / 2);
+    } else {
+      source_h = Math.round(video_width / preview_aspect_ratio);
+      source_y = Math.round((video_height - source_h) / 2);
+    }
+
+    ctx.drawImage(camera_video, source_x, source_y, source_w, source_h, 0, 0, target_width, target_height);
+    return canvas.toDataURL("image/jpeg", 0.92);
+  }
+
+  function startCaptureFlow() {
+    capture_error.textContent = "";
+
+    if (!camera_ready) {
+      capture_error.textContent = "Câmera não disponível.";
+      return;
+    }
+
+    capture_button.disabled = true;
+    capture_button.classList.add("opacity-60");
+
+    let seconds_left = 3;
+    countdown_overlay.classList.remove("hidden");
+    countdown_overlay.querySelector("div").textContent = String(seconds_left);
+
+    if (countdown_interval_id !== null) {
+      window.clearInterval(countdown_interval_id);
+      countdown_interval_id = null;
+    }
+
+    countdown_interval_id = window.setInterval(() => {
+      seconds_left -= 1;
+
+      if (seconds_left > 0) {
+        countdown_overlay.querySelector("div").textContent = String(seconds_left);
+        return;
+      }
+
+      window.clearInterval(countdown_interval_id);
+      countdown_interval_id = null;
+      countdown_overlay.classList.add("hidden");
+
+      try {
+        captured_photo_data_url = captureCurrentFrameAsJpegDataUrl();
+        captured_image.src = captured_photo_data_url;
+        captured_image.classList.remove("hidden");
+        camera_video.classList.add("hidden");
+
+        retake_button.classList.remove("hidden");
+        proceed_button.classList.remove("hidden");
+
+        updateSubmitEnabled();
+      } catch (error) {
+        capture_error.textContent = String(error && error.message ? error.message : error);
+        capture_button.disabled = false;
+        capture_button.classList.remove("opacity-60");
+      }
+    }, 1000);
+  }
+
+  function updateEntryModeUi() {
+    entry_mode_label.textContent = entry_mode === "spotify" ? "Spotify" : "Manual";
+
+    if (entry_mode === "spotify") {
+      panel_manual.classList.add("hidden");
+      panel_spotify.classList.remove("hidden");
+    } else {
+      panel_spotify.classList.add("hidden");
+      panel_manual.classList.remove("hidden");
+    }
+
+    updateSubmitEnabled();
+  }
+
+  function setAdminUnlocked(value) {
+    admin_unlocked = value;
+    if (admin_unlocked) {
+      admin_unlocked_label.classList.remove("hidden");
+    } else {
+      admin_unlocked_label.classList.add("hidden");
+    }
+  }
+
+  function updateCounter(input_element, counter_element, max_chars) {
+    const value = input_element.value || "";
+    const remaining = Math.max(0, max_chars - value.length);
+    counter_element.textContent = `${value.length}/${max_chars} (restam ${remaining})`;
+  }
+
+  function updateSubmitEnabled() {
+    const person_name = (person_name_input.value || "").trim();
+    let artist_name = "";
+    let track_name = "";
+
+    if (entry_mode === "spotify") {
+      artist_name = spotify_selected_artist ? String(spotify_selected_artist.name || "") : "";
+      track_name = spotify_selected_track ? String(spotify_selected_track.name || "") : "";
+    } else {
+      artist_name = (manual_artist_input.value || "").trim();
+      track_name = (manual_track_input.value || "").trim();
+    }
+
+    const ok = person_name !== "" && artist_name !== "" && track_name !== "" && captured_photo_data_url;
+    submit_button.disabled = !ok;
   }
 
   async function submitJob() {
-    review_error.textContent = "";
+    form_error.textContent = "";
     setScreen("status");
-    status_title.textContent = "Enviando...";
-    status_message.textContent = "Criando job no hotfolder.";
+    status_title.textContent = "Processando...";
+    status_message.textContent = "Montando imagem e criando job.";
     status_done_button.classList.add("hidden");
 
+    const person_name = (person_name_input.value || "").trim();
+    const artist_name = entry_mode === "spotify"
+      ? (spotify_selected_artist ? String(spotify_selected_artist.name || "") : "")
+      : (manual_artist_input.value || "").trim();
+    const track_name = entry_mode === "spotify"
+      ? (spotify_selected_track ? String(spotify_selected_track.name || "") : "")
+      : (manual_track_input.value || "").trim();
+
     try {
-      const body = {
+      const compose_body = {
         csrf_token,
-        print_mode,
-        front_image_data_url,
-        back_image_data_url: print_mode === "front_and_back" ? back_image_data_url : ""
+        preview_only: false,
+        person_name,
+        artist_name,
+        track_name,
+        photo_data_url: captured_photo_data_url
+      };
+
+      const compose_response = await fetch(api_compose_image_url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(compose_body)
+      });
+
+      const compose_data = await compose_response.json();
+      if (!compose_data.ok) {
+        throw new Error(compose_data.error || "Falha ao montar imagem.");
+      }
+
+      const final_image_data_url = String(compose_data.final_image_data_url || "");
+      if (!final_image_data_url.startsWith("data:image/")) {
+        throw new Error("Resposta inválida do compositor.");
+      }
+
+      const job_body = {
+        csrf_token,
+        print_mode: "front_only",
+        front_image_data_url: final_image_data_url,
+        back_image_data_url: ""
       };
 
       const response = await fetch(api_create_job_url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify(job_body)
       });
 
       const data = await response.json();
@@ -429,34 +604,47 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     }
   }
 
+  async function loadCompositorConfig() {
+    const response = await fetch(api_get_compositor_config_url, { cache: "no-store" });
+    const data = await response.json();
+    if (!data.ok) {
+      throw new Error(data.error || "Falha ao carregar config do compositor.");
+    }
+    compositor_config = data.compositor_config;
+
+    const photo_box = compositor_config.photo_box;
+    const aspect_ratio = Number(photo_box.width) / Number(photo_box.height);
+    if (Number.isFinite(aspect_ratio) && aspect_ratio > 0) {
+      setPreviewAspectRatio(aspect_ratio);
+    }
+
+    const name_max = Number(compositor_config.text_fields?.person_name?.max_chars || 40);
+    const artist_max = Number(compositor_config.text_fields?.artist_name?.max_chars || 40);
+    const track_max = Number(compositor_config.text_fields?.track_name?.max_chars || 40);
+
+    person_name_input.maxLength = name_max;
+    manual_artist_input.maxLength = artist_max;
+    manual_track_input.maxLength = track_max;
+
+    updateCounter(person_name_input, person_name_counter, name_max);
+    updateCounter(manual_artist_input, artist_counter, artist_max);
+    updateCounter(manual_track_input, track_counter, track_max);
+  }
+
+  async function fetchAndStartCamera() {
+    await enumerateVideoDevices();
+    current_device_id = available_video_devices[0]?.deviceId || null;
+    await startCamera(current_device_id);
+  }
+
   // UI events
   idle_start_button.addEventListener("click", async () => {
     resetState();
-    setScreen("mode");
-  });
-
-  mode_cancel_button.addEventListener("click", () => goIdle());
-
-  mode_front_only.addEventListener("click", async () => {
-    print_mode = "front_only";
     try {
-      await enumerateVideoDevices();
-      current_device_id = available_video_devices[0]?.deviceId || null;
-      await startCamera(current_device_id);
-      startCapture("front");
-    } catch (error) {
-      capture_error.textContent = String(error && error.message ? error.message : error);
+      await fetchAndStartCamera();
       setScreen("capture");
-    }
-  });
-
-  mode_front_and_back.addEventListener("click", async () => {
-    print_mode = "front_and_back";
-    try {
-      await enumerateVideoDevices();
-      current_device_id = available_video_devices[0]?.deviceId || null;
-      await startCamera(current_device_id);
-      startCapture("front");
+      startIdleTimer();
+      resetIdleTimer();
     } catch (error) {
       capture_error.textContent = String(error && error.message ? error.message : error);
       setScreen("capture");
@@ -467,23 +655,27 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
   capture_button.addEventListener("click", () => {
     resetIdleTimer();
+    startCaptureFlow();
+  });
 
-    const captured_data_url = captureCurrentFrameAsJpegDataUrl();
-    if (capture_side === "front") {
-      front_image_data_url = captured_data_url;
-      if (print_mode === "front_and_back") {
-        capture_side = "back";
-        startCapture("back");
-      } else {
-        showReview();
-      }
-      return;
-    }
+  retake_button.addEventListener("click", () => {
+    resetIdleTimer();
+    captured_photo_data_url = null;
+    captured_image.src = "";
+    captured_image.classList.add("hidden");
+    camera_video.classList.remove("hidden");
+    capture_button.disabled = false;
+    capture_button.classList.remove("opacity-60");
+    retake_button.classList.add("hidden");
+    proceed_button.classList.add("hidden");
+    updateSubmitEnabled();
+  });
 
-    if (capture_side === "back") {
-      back_image_data_url = captured_data_url;
-      showReview();
-    }
+  proceed_button.addEventListener("click", () => {
+    stopIdleTimer();
+    stopCamera();
+    setScreen("form");
+    updateSubmitEnabled();
   });
 
   switch_camera_button.addEventListener("click", async () => {
@@ -506,56 +698,32 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     }
   });
 
-  upload_input.addEventListener("change", async (event) => {
-    resetIdleTimer();
-    const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
-    if (!file) return;
-
+  form_back_button.addEventListener("click", async () => {
     try {
-      const data_url = await loadFileAsDataUrl(file);
-      if (capture_side === "front") {
-        front_image_data_url = data_url;
-        if (print_mode === "front_and_back") {
-          startCapture("back");
-        } else {
-          showReview();
-        }
-      } else {
-        back_image_data_url = data_url;
-        showReview();
-      }
+      await fetchAndStartCamera();
+      setScreen("capture");
+      startIdleTimer();
+      resetIdleTimer();
     } catch (error) {
-      capture_error.textContent = String(error && error.message ? error.message : error);
-    } finally {
-      upload_input.value = "";
-    }
-  });
-
-  retake_front_button.addEventListener("click", async () => {
-    try {
-      await enumerateVideoDevices();
-      current_device_id = available_video_devices[0]?.deviceId || null;
-      await startCamera(current_device_id);
-      startCapture("front");
-    } catch (error) {
-      review_error.textContent = String(error && error.message ? error.message : error);
-    }
-  });
-
-  retake_back_button.addEventListener("click", async () => {
-    try {
-      await enumerateVideoDevices();
-      current_device_id = available_video_devices[0]?.deviceId || null;
-      await startCamera(current_device_id);
-      startCapture("back");
-    } catch (error) {
-      review_error.textContent = String(error && error.message ? error.message : error);
+      form_error.textContent = String(error && error.message ? error.message : error);
     }
   });
 
   submit_button.addEventListener("click", () => submitJob());
-  review_cancel_button.addEventListener("click", () => goIdle());
   status_done_button.addEventListener("click", () => goIdle());
+
+  person_name_input.addEventListener("input", () => {
+    updateCounter(person_name_input, person_name_counter, person_name_input.maxLength);
+    updateSubmitEnabled();
+  });
+  manual_artist_input.addEventListener("input", () => {
+    updateCounter(manual_artist_input, artist_counter, manual_artist_input.maxLength);
+    updateSubmitEnabled();
+  });
+  manual_track_input.addEventListener("input", () => {
+    updateCounter(manual_track_input, track_counter, manual_track_input.maxLength);
+    updateSubmitEnabled();
+  });
 
   // Global user interaction resets idle timer (only when capturing)
   ["click", "touchstart", "mousemove", "keydown"].forEach(event_name => {
@@ -566,9 +734,412 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     }, { passive: true });
   });
 
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  // ===== Spotify (adaptado do spotify-list-test.html) =====
+  const spotify_client_id = "1e0ca3980285487bb2eecd0f8899e9d6";
+  const spotify_redirect_uri = window.location.origin + window.location.pathname;
+  const spotify_authorization_endpoint = "https://accounts.spotify.com/authorize";
+  const spotify_token_endpoint = "https://accounts.spotify.com/api/token";
+  const spotify_api_base = "https://api.spotify.com/v1";
+  const spotify_requested_scopes = "";
+
+  const spotify_storage_keys = {
+    token_data: "spotify_token_data",
+    code_verifier: "spotify_code_verifier",
+    oauth_state: "spotify_oauth_state"
+  };
+
+  function getRandomString(length) {
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => ("0" + byte.toString(16)).slice(-2)).join("");
+  }
+
+  function base64UrlEncode(array_buffer) {
+    const bytes = new Uint8Array(array_buffer);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  async function generateCodeChallenge(code_verifier) {
+    if (window.crypto?.subtle?.digest) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(code_verifier);
+      const digest = await window.crypto.subtle.digest("SHA-256", data);
+      return base64UrlEncode(digest);
+    }
+    if (window.sha256?.arrayBuffer) {
+      const digest = window.sha256.arrayBuffer(code_verifier);
+      return base64UrlEncode(digest);
+    }
+    throw new Error("SHA-256 não disponível.");
+  }
+
+  function setSpotifyTokenData(token_data) {
+    localStorage.setItem(spotify_storage_keys.token_data, JSON.stringify(token_data));
+  }
+
+  function getSpotifyTokenData() {
+    const raw = localStorage.getItem(spotify_storage_keys.token_data);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function clearSpotifyTokenData() {
+    localStorage.removeItem(spotify_storage_keys.token_data);
+  }
+
+  function isSpotifyTokenValid(token_data) {
+    if (!token_data) return false;
+    if (!token_data.access_token) return false;
+    if (!token_data.expires_at_ms) return false;
+    return Date.now() < token_data.expires_at_ms - 10_000;
+  }
+
+  async function spotifyApiFetch(url, options = {}) {
+    const token_data = getSpotifyTokenData();
+    if (!isSpotifyTokenValid(token_data)) {
+      throw new Error("Token inválido ou expirado. Faça login novamente.");
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token_data.access_token}`
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Spotify API error (${response.status}): ${text}`);
+    }
+
+    return response.json();
+  }
+
+  async function spotifyRedirectToAuthorize() {
+    if (!spotify_client_id) {
+      alert("Client ID do Spotify não configurado.");
+      return;
+    }
+
+    const code_verifier = getRandomString(64);
+    const code_challenge = await generateCodeChallenge(code_verifier);
+    const oauth_state = getRandomString(16);
+
+    sessionStorage.setItem(spotify_storage_keys.code_verifier, code_verifier);
+    sessionStorage.setItem(spotify_storage_keys.oauth_state, oauth_state);
+
+    const params = new URLSearchParams({
+      client_id: spotify_client_id,
+      response_type: "code",
+      redirect_uri: spotify_redirect_uri,
+      code_challenge_method: "S256",
+      code_challenge,
+      state: oauth_state
+    });
+
+    if (spotify_requested_scopes) {
+      params.set("scope", spotify_requested_scopes);
+    }
+
+    window.location.assign(`${spotify_authorization_endpoint}?${params.toString()}`);
+  }
+
+  async function spotifyExchangeCodeForToken(code) {
+    const code_verifier = sessionStorage.getItem(spotify_storage_keys.code_verifier);
+    if (!code_verifier) throw new Error("code_verifier não encontrado. Refaça o login.");
+
+    const body = new URLSearchParams({
+      client_id: spotify_client_id,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: spotify_redirect_uri,
+      code_verifier
+    });
+
+    const response = await fetch(spotify_token_endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Token exchange falhou (${response.status}): ${text}`);
+    }
+
+    const token_response = await response.json();
+    const expires_at_ms = Date.now() + (token_response.expires_in * 1000);
+
+    setSpotifyTokenData({
+      access_token: token_response.access_token,
+      refresh_token: token_response.refresh_token || null,
+      expires_at_ms
+    });
+
+    sessionStorage.removeItem(spotify_storage_keys.code_verifier);
+  }
+
+  async function spotifyHandleRedirectCallback() {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
+    const returned_state = url.searchParams.get("state");
+    if (!code) return;
+
+    const expected_state = sessionStorage.getItem(spotify_storage_keys.oauth_state);
+    sessionStorage.removeItem(spotify_storage_keys.oauth_state);
+
+    if (!expected_state || expected_state !== returned_state) {
+      throw new Error("State inválido (possível erro de autenticação).");
+    }
+
+    await spotifyExchangeCodeForToken(code);
+
+    const clean_url = new URL(window.location.href);
+    clean_url.searchParams.delete("code");
+    clean_url.searchParams.delete("state");
+    window.history.replaceState({}, document.title, clean_url.toString());
+  }
+
+  function spotifyUpdateAuthUi() {
+    const token_data = getSpotifyTokenData();
+    const logged_in = isSpotifyTokenValid(token_data);
+
+    spotify_login_button.disabled = logged_in;
+    spotify_logout_button.disabled = !logged_in;
+    spotify_artist_search_button.disabled = !logged_in;
+
+    spotify_auth_status.textContent = logged_in ? "Logado" : "Deslogado";
+    spotify_auth_status.className = `px-3 py-1 rounded-full border border-slate-700 text-xs ${logged_in ? "text-emerald-300" : "text-slate-300"}`;
+  }
+
+  function spotifyRenderSelected() {
+    if (!spotify_selected_artist && !spotify_selected_track) {
+      spotify_selected_values.textContent = "Nada selecionado ainda.";
+      return;
+    }
+
+    const artist_html = spotify_selected_artist
+      ? `<div><strong>Artista:</strong> ${escapeHtml(spotify_selected_artist.name)}</div>`
+      : `<div><strong>Artista:</strong> (não selecionado)</div>`;
+
+    const track_html = spotify_selected_track
+      ? `<div><strong>Música:</strong> ${escapeHtml(spotify_selected_track.name)}</div>`
+      : `<div><strong>Música:</strong> (não selecionada)</div>`;
+
+    spotify_selected_values.innerHTML = `${artist_html}${track_html}`;
+  }
+
+  function spotifyRenderArtistResults(artists) {
+    spotify_artist_results.innerHTML = "";
+
+    if (!artists.length) {
+      spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Nenhum artista encontrado.</div>`;
+      return;
+    }
+
+    for (const artist of artists) {
+      const image_url = artist.images?.[2]?.url || artist.images?.[1]?.url || artist.images?.[0]?.url || "";
+      const item = document.createElement("div");
+      item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
+      item.innerHTML = `
+        <img alt="" src="${escapeHtml(image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
+        <div class="flex-1">
+          <div class="font-semibold">${escapeHtml(artist.name)}</div>
+          <div class="text-xs text-slate-400">Popularidade: ${escapeHtml(artist.popularity ?? "—")}</div>
+        </div>
+        <button class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700" data_artist_id="${escapeHtml(artist.id)}">Escolher</button>
+      `;
+      item.querySelector("button").addEventListener("click", () => {
+        spotifySelectArtist({ id: artist.id, name: artist.name });
+      });
+      spotify_artist_results.appendChild(item);
+    }
+  }
+
+  function spotifyRenderTrackResults(tracks) {
+    spotify_track_results.innerHTML = "";
+
+    if (!tracks.length) {
+      spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Não encontrei top tracks.</div>`;
+      return;
+    }
+
+    for (const track of tracks) {
+      const album_image_url = track.album?.images?.[2]?.url || track.album?.images?.[1]?.url || track.album?.images?.[0]?.url || "";
+      const item = document.createElement("div");
+      item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
+      item.innerHTML = `
+        <img alt="" src="${escapeHtml(album_image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
+        <div class="flex-1">
+          <div class="font-semibold">${escapeHtml(track.name)}</div>
+          <div class="text-xs text-slate-400">${escapeHtml(track.album?.name || "")}</div>
+        </div>
+        <button class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold">Escolher</button>
+      `;
+      item.querySelector("button").addEventListener("click", () => {
+        spotifySelectTrack({ id: track.id, name: track.name });
+      });
+      spotify_track_results.appendChild(item);
+    }
+  }
+
+  async function spotifySearchArtist() {
+    const query = spotify_artist_query.value.trim();
+    spotify_artist_results.innerHTML = "";
+    spotify_track_results.innerHTML = "";
+    spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
+    spotify_selected_artist = null;
+    spotify_selected_track = null;
+    spotifyRenderSelected();
+    updateSubmitEnabled();
+
+    if (!query) {
+      spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Digite um nome pra buscar.</div>`;
+      return;
+    }
+
+    try {
+      const url = new URL(`${spotify_api_base}/search`);
+      url.searchParams.set("q", query);
+      url.searchParams.set("type", "artist");
+      url.searchParams.set("limit", "10");
+      const response_json = await spotifyApiFetch(url.toString());
+      const artists = response_json?.artists?.items || [];
+      spotifyRenderArtistResults(artists);
+    } catch (error) {
+      spotify_artist_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  async function spotifyFetchTopTracks(artist_id) {
+    try {
+      const url = new URL(`${spotify_api_base}/artists/${artist_id}/top-tracks`);
+      url.searchParams.set("market", "BR");
+      const response_json = await spotifyApiFetch(url.toString());
+      const tracks = response_json?.tracks || [];
+      spotifyRenderTrackResults(tracks);
+    } catch (error) {
+      spotify_track_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  function spotifySelectArtist(artist) {
+    spotify_selected_artist = artist;
+    spotify_selected_track = null;
+    spotify_selected_artist_label.innerHTML = `Artista selecionado: <strong>${escapeHtml(artist.name)}</strong>`;
+    spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Carregando músicas...</div>`;
+    spotifyRenderSelected();
+    updateSubmitEnabled();
+    spotifyFetchTopTracks(artist.id);
+  }
+
+  function spotifySelectTrack(track) {
+    spotify_selected_track = track;
+    spotifyRenderSelected();
+    updateSubmitEnabled();
+  }
+
+  function spotifyLogout() {
+    clearSpotifyTokenData();
+    spotify_selected_artist = null;
+    spotify_selected_track = null;
+    spotify_artist_results.innerHTML = "";
+    spotify_track_results.innerHTML = "";
+    spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
+    spotifyRenderSelected();
+    spotifyUpdateAuthUi();
+    updateSubmitEnabled();
+  }
+
+  spotify_login_button.addEventListener("click", spotifyRedirectToAuthorize);
+  spotify_logout_button.addEventListener("click", spotifyLogout);
+  spotify_artist_search_button.addEventListener("click", spotifySearchArtist);
+  spotify_artist_query.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !spotify_artist_search_button.disabled) spotifySearchArtist();
+  });
+
+  // Admin unlock + mode toggle
+  document.addEventListener("keydown", async (event) => {
+    const is_toggle_shortcut = event.ctrlKey && event.altKey && (event.key === "p" || event.key === "P");
+    const is_dashboard_shortcut = event.ctrlKey && event.altKey && (event.key === "d" || event.key === "D");
+    if (!is_toggle_shortcut && !is_dashboard_shortcut) return;
+
+    event.preventDefault();
+
+    if (is_dashboard_shortcut) {
+      if (!admin_unlocked) {
+        alert('Destrave o admin primeiro (Ctrl + Alt + P).');
+        return;
+      }
+      window.open('admin/index.php', '_blank');
+      return;
+    }
+
+    if (admin_unlocked) {
+      entry_mode = entry_mode === "manual" ? "spotify" : "manual";
+      updateEntryModeUi();
+      return;
+    }
+
+    const password = window.prompt("Senha admin:");
+    if (!password) return;
+
+    try {
+      const response = await fetch("admin/unlock.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+      const data = await response.json();
+      if (!data.ok) {
+        alert("Senha inválida");
+        return;
+      }
+      setAdminUnlocked(true);
+      entry_mode = entry_mode === "manual" ? "spotify" : "manual";
+      updateEntryModeUi();
+    } catch {
+      alert("Falha ao validar senha");
+    }
+  });
+
   // Init
   setScreen("idle");
   fetchHealth();
+
+  (async () => {
+    try {
+      await spotifyHandleRedirectCallback();
+    } catch (error) {
+      alert(String(error && error.message ? error.message : error));
+      spotifyLogout();
+    }
+    spotifyUpdateAuthUi();
+
+    try {
+      await loadCompositorConfig();
+    } catch (error) {
+      idle_health.textContent = String(error && error.message ? error.message : error);
+    }
+
+    updateEntryModeUi();
+  })();
 })();
 </script>
 </body>
