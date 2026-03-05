@@ -23,9 +23,9 @@ if (!is_array($payload)) {
 
 $csrf_token = (string)($payload['csrf_token'] ?? '');
 $session_csrf_token = (string)($_SESSION['csrf_token'] ?? '');
-// if ($csrf_token === '' || $session_csrf_token === '' || !hash_equals($session_csrf_token, $csrf_token)) {
-//     jsonResponse(['ok' => false, 'error' => 'Invalid CSRF token.'], 403);
-// }
+if ($csrf_token === '' || $session_csrf_token === '' || !hash_equals($session_csrf_token, $csrf_token)) {
+    jsonResponse(['ok' => false, 'error' => 'Invalid CSRF token.'], 403);
+}
 
 $preview_only = (bool)($payload['preview_only'] ?? false);
 $person_name = (string)($payload['person_name'] ?? '');

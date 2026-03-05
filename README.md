@@ -3,6 +3,7 @@
 ## Rodar local (dev)
 
 ```bash
+py -m pip install flask flask-cors rembg pillow onnxruntime
 cd public
 php -S 127.0.0.1:8000
 ```

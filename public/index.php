@@ -18,6 +18,11 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Card Kiosk</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    #camera_video {
+        transform: scaleX(-1);
+    }
+  </style>
 </head>
 
 <body class="h-screen bg-slate-950 text-slate-100 select-none overflow-hidden">
@@ -460,6 +465,48 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         return canvas.toDataURL("image/jpeg", 0.92);
       }
 
+      async function processPhotoRemoveBg(photoDataUrl) {
+
+        try {
+
+          const response = await fetch("http://localhost:5001/remove-bg", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              image: photoDataUrl
+            })
+          });
+
+          const data = await response.json();
+
+          if (!data.ok) {
+            throw new Error(data.error);
+          }
+
+          // usa imagem processada
+          captured_photo_data_url = data.image;
+
+          captured_image.src = data.image;
+          captured_image.classList.remove("hidden");
+          camera_video.classList.add("hidden");
+
+          retake_button.classList.remove("hidden");
+          proceed_button.classList.remove("hidden");
+
+        } catch (err) {
+
+          capture_error.textContent = "Erro ao remover fundo";
+
+          // fallback: usa imagem original
+          captured_image.src = photoDataUrl;
+          captured_image.classList.remove("hidden");
+
+        }
+
+      }
+
       function startCaptureFlow() {
         capture_error.textContent = "";
 
@@ -494,7 +541,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
           try {
             captured_photo_data_url = captureCurrentFrameAsJpegDataUrl();
-            captured_image.src = captured_photo_data_url;
+            processPhotoRemoveBg(captured_photo_data_url);
             captured_image.classList.remove("hidden");
             camera_video.classList.add("hidden");
 
