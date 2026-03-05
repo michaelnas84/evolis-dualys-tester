@@ -52,13 +52,44 @@ try {
         throw new RuntimeException('Photo image too large.');
     }
 
-    // Load config and compose
     $compositor_config = loadCompositorConfig();
-    $result = composeFinalImageDataUrl($compositor_config, $photo_data_url, $person_name, $artist_name, $track_name, $preview_only);
+    $result = composeFinalImageDataUrl(
+        $compositor_config,
+        $photo_data_url,
+        $person_name,
+        $artist_name,
+        $track_name,
+        $preview_only
+    );
+
+    // Preview do dashboard: mantém data_url (ok ser grande, uso pontual)
+    if ($preview_only) {
+        jsonResponse([
+            'ok' => true,
+            'final_image_data_url' => (string)$result['final_image_data_url'],
+            'frame_file_name' => (string)$result['frame_file_name'],
+        ]);
+    }
+
+    // Fluxo do kiosk: NÃO devolve base64. Salva no servidor e retorna só a chave.
+    $final_parsed = parseDataUrlImage((string)$result['final_image_data_url']);
+    $final_binary = (string)$final_parsed['binary_data'];
+
+    if (strlen($final_binary) > $max_image_bytes) {
+        throw new RuntimeException('Final image too large.');
+    }
+
+    $composed_dir = __DIR__ . '/../../storage/composed';
+    ensureDirectoryExists($composed_dir);
+
+    $composed_file_name = 'composed_' . date('Ymd_His') . '_' . bin2hex(random_bytes(8)) . '.png';
+    $composed_file_path = joinPath($composed_dir, $composed_file_name);
+
+    writeFileAtomic($composed_file_path, $final_binary);
 
     jsonResponse([
         'ok' => true,
-        'final_image_data_url' => (string)$result['final_image_data_url'],
+        'composed_image_key' => $composed_file_name,
         'frame_file_name' => (string)$result['frame_file_name'],
     ]);
 } catch (Throwable $exception) {

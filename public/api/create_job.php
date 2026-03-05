@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 session_start();
@@ -26,6 +27,9 @@ if ($csrf_token === '' || $session_csrf_token === '' || !hash_equals($session_cs
     jsonResponse(['ok' => false, 'error' => 'Invalid CSRF token.'], 403);
 }
 
+$front_composed_image_key = (string)($payload['front_composed_image_key'] ?? '');
+$back_composed_image_key = (string)($payload['back_composed_image_key'] ?? '');
+
 $print_mode = (string)($payload['print_mode'] ?? '');
 $front_image_data_url = (string)($payload['front_image_data_url'] ?? '');
 $back_image_data_url = (string)($payload['back_image_data_url'] ?? '');
@@ -33,8 +37,8 @@ $back_image_data_url = (string)($payload['back_image_data_url'] ?? '');
 if (!in_array($print_mode, ['front_only', 'front_and_back'], true)) {
     jsonResponse(['ok' => false, 'error' => 'Invalid print_mode.'], 400);
 }
-if ($front_image_data_url === '') {
-    jsonResponse(['ok' => false, 'error' => 'Missing front_image_data_url.'], 400);
+if ($front_image_data_url === '' && $front_composed_image_key === '') {
+    jsonResponse(['ok' => false, 'error' => 'Missing front image (data_url or composed key).'], 400);
 }
 if ($print_mode === 'front_and_back' && $back_image_data_url === '') {
     jsonResponse(['ok' => false, 'error' => 'Missing back_image_data_url for front_and_back.'], 400);
@@ -51,9 +55,34 @@ try {
     $job_folder_path = joinPath($hotfolder_in_path, $job_id);
     ensureDirectoryExists($job_folder_path);
 
-    $front_parsed = parseDataUrlImage($front_image_data_url);
-    $front_mime_type = (string)$front_parsed['mime_type'];
-    $front_binary_data = (string)$front_parsed['binary_data'];
+    $front_binary_data = '';
+    $front_mime_type = 'image/png';
+
+    if ($front_composed_image_key !== '') {
+        if (preg_match('/[\/\\\\]/', $front_composed_image_key)) {
+            throw new RuntimeException('Invalid composed key.');
+        }
+
+        $composed_dir = __DIR__ . '/../../storage/composed';
+        $composed_path = joinPath($composed_dir, $front_composed_image_key);
+
+        if (!is_file($composed_path)) {
+            throw new RuntimeException('Composed image not found.');
+        }
+
+        $front_binary_data = (string)file_get_contents($composed_path);
+
+        if ($front_binary_data === '') {
+            throw new RuntimeException('Failed to read composed image.');
+        }
+
+        // Apaga depois de consumir para não acumular
+        @unlink($composed_path);
+    } else {
+        $front_parsed = parseDataUrlImage($front_image_data_url);
+        $front_mime_type = (string)$front_parsed['mime_type'];
+        $front_binary_data = (string)$front_parsed['binary_data'];
+    }
 
     if (!in_array($front_mime_type, $allowed_image_mime_types, true)) {
         throw new RuntimeException('Unsupported front image mime_type: ' . $front_mime_type);

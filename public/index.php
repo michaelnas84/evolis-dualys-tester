@@ -475,7 +475,9 @@ $csrf_token = (string)$_SESSION['csrf_token'];
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              image: photoDataUrl
+              image: photoDataUrl,
+              apply_background: true,
+              output_format: "jpg"
             })
           });
 
@@ -641,15 +643,16 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             throw new Error(compose_data.error || "Falha ao montar imagem.");
           }
 
-          const final_image_data_url = String(compose_data.final_image_data_url || "");
-          if (!final_image_data_url.startsWith("data:image/")) {
-            throw new Error("Resposta inválida do compositor.");
+          const composed_image_key = String(compose_data.composed_image_key || "");
+          if (!composed_image_key) {
+            throw new Error("Resposta inválida do compositor (sem composed_image_key).");
           }
 
           const job_body = {
             csrf_token,
             print_mode: "front_only",
-            front_image_data_url: final_image_data_url,
+            front_composed_image_key: composed_image_key,
+            front_image_data_url: "",
             back_image_data_url: ""
           };
 

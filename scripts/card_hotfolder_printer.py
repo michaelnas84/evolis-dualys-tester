@@ -28,6 +28,105 @@ class PrintJob:
     back_path: Optional[Path] = None
     pdf_path: Optional[Path] = None
 
+    # New (defaults keep backward compatibility)
+    form_name: str = "CR80"
+    print_dpi: int = 300
+    auto_rotate: bool = True
+    background_color_rgb: Tuple[int, int, int] = (255, 255, 255)
+
+def resolveFormName(printer_handle, requested_form_name: str) -> str:
+    requested = (requested_form_name or "").strip().lower()
+    if not requested:
+        return requested_form_name
+
+    try:
+        forms = win32print.EnumForms(printer_handle, 1)
+    except Exception:
+        return requested_form_name
+
+    for form in forms:
+        form_name = str(form.get("Name", ""))
+        if requested in form_name.lower():
+            return form_name
+
+    return requested_form_name
+
+
+def buildDevmodeForJob(
+    printer_name: str,
+    form_name: str,
+    print_dpi: int,
+    duplex: str,
+    orientation: str,  # "portrait" | "landscape"
+):
+    printer_handle = win32print.OpenPrinter(printer_name)
+    try:
+        printer_info = win32print.GetPrinter(printer_handle, 2)
+        devmode = printer_info.get("pDevMode")
+        if devmode is None:
+            return None
+
+        # Form / paper
+        if form_name:
+            resolved_form_name = resolveFormName(printer_handle, form_name)
+            devmode.FormName = resolved_form_name
+            devmode.Fields |= win32con.DM_FORMNAME
+
+        # Resolution
+        if int(print_dpi) > 0:
+            devmode.PrintQuality = int(print_dpi)
+            devmode.YResolution = int(print_dpi)
+            devmode.Fields |= (win32con.DM_PRINTQUALITY | win32con.DM_YRESOLUTION)
+
+        # Orientation
+        if orientation == "landscape":
+            devmode.Orientation = win32con.DMORIENT_LANDSCAPE
+            devmode.Fields |= win32con.DM_ORIENTATION
+        elif orientation == "portrait":
+            devmode.Orientation = win32con.DMORIENT_PORTRAIT
+            devmode.Fields |= win32con.DM_ORIENTATION
+
+        # Duplex (may be ignored by card drivers, but doesn't hurt)
+        try:
+            if duplex in ("true", "auto"):
+                devmode.Duplex = win32con.DMDUP_VERTICAL
+                devmode.Fields |= win32con.DM_DUPLEX
+            elif duplex == "false":
+                devmode.Duplex = win32con.DMDUP_SIMPLEX
+                devmode.Fields |= win32con.DM_DUPLEX
+        except Exception:
+            pass
+
+        # Ask driver to validate
+        try:
+            devmode = win32print.DocumentProperties(
+                None,
+                printer_handle,
+                printer_name,
+                devmode,
+                devmode,
+                win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER,
+            )
+        except Exception:
+            pass
+
+        return devmode
+    finally:
+        win32print.ClosePrinter(printer_handle)
+
+
+def createPrinterDeviceContext(printer_name: str, devmode):
+    device_context = win32ui.CreateDC()
+
+    if devmode is not None:
+        try:
+            device_context.CreateDC("WINSPOOL", printer_name, None, devmode)
+            return device_context
+        except Exception:
+            pass
+
+    device_context.CreatePrinterDC(printer_name)
+    return device_context
 
 def listPrinters() -> List[str]:
     printers = []
@@ -99,43 +198,83 @@ def mmToInches(mm_value: float) -> float:
     return float(mm_value) / 25.4
 
 
+def chooseAutoRotateDegrees(image: Image.Image, target_width_px: int, target_height_px: int) -> int:
+    candidate_degrees = [0, 90, 180, 270]
+    best_degrees = 0
+    best_scale = -1.0
+
+    image_width, image_height = image.size
+
+    for degrees in candidate_degrees:
+        if degrees in (90, 270):
+            rotated_width, rotated_height = image_height, image_width
+        else:
+            rotated_width, rotated_height = image_width, image_height
+
+        scale = min(target_width_px / rotated_width, target_height_px / rotated_height)
+        if scale > best_scale:
+            best_scale = scale
+            best_degrees = degrees
+
+    return best_degrees
+
+
 def prepareImageForCard(
     image: Image.Image,
     target_width_px: int,
     target_height_px: int,
     fit_mode: str,
     rotate_degrees: int,
+    auto_rotate: bool,
+    background_color_rgb: Tuple[int, int, int],
 ) -> Image.Image:
-    if rotate_degrees != 0:
-        image = image.rotate(rotate_degrees, expand=True)
+    # Handle EXIF orientation if present
+    image = ImageOps.exif_transpose(image)
+
+    effective_rotate_degrees = rotate_degrees
+    if auto_rotate and rotate_degrees == 0:
+        effective_rotate_degrees = chooseAutoRotateDegrees(image, target_width_px, target_height_px)
+
+    if effective_rotate_degrees != 0:
+        image = image.rotate(effective_rotate_degrees, expand=True)
 
     image = image.convert("RGB")
 
     if fit_mode == "stretch":
         return image.resize((target_width_px, target_height_px), Image.Resampling.LANCZOS)
 
-    if fit_mode == "contain":
-        # Letterbox as needed
-        return ImageOps.contain(image, (target_width_px, target_height_px), Image.Resampling.LANCZOS)
-
     if fit_mode == "fill":
-        # Crop to fill the whole card
-        return ImageOps.fit(image, (target_width_px, target_height_px), Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+        return ImageOps.fit(
+            image,
+            (target_width_px, target_height_px),
+            Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+
+    if fit_mode == "contain":
+        contained = ImageOps.contain(image, (target_width_px, target_height_px), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGB", (target_width_px, target_height_px), background_color_rgb)
+        paste_left = (target_width_px - contained.width) // 2
+        paste_top = (target_height_px - contained.height) // 2
+        canvas.paste(contained, (paste_left, paste_top))
+        return canvas
 
     raise ValueError("fit_mode must be one of: contain, fill, stretch")
 
 
-def getPrinterCaps(printer_name: str) -> Tuple[int, int, int, int]:
-    device_context = win32ui.CreateDC()
-    device_context.CreatePrinterDC(printer_name)
+def getPrinterCaps(printer_name: str, devmode=None) -> Tuple[int, int, int, int, int, int]:
+    device_context = createPrinterDeviceContext(printer_name, devmode)
 
     printable_width_px = device_context.GetDeviceCaps(win32con.HORZRES)
     printable_height_px = device_context.GetDeviceCaps(win32con.VERTRES)
     dpi_x = device_context.GetDeviceCaps(win32con.LOGPIXELSX)
     dpi_y = device_context.GetDeviceCaps(win32con.LOGPIXELSY)
 
+    offset_x_px = device_context.GetDeviceCaps(win32con.PHYSICALOFFSETX)
+    offset_y_px = device_context.GetDeviceCaps(win32con.PHYSICALOFFSETY)
+
     device_context.DeleteDC()
-    return printable_width_px, printable_height_px, dpi_x, dpi_y
+    return printable_width_px, printable_height_px, dpi_x, dpi_y, offset_x_px, offset_y_px
 
 
 def renderPdfToImages(pdf_path: Path, dpi: int = 300) -> List[Image.Image]:
@@ -169,25 +308,36 @@ def printImagePages(
     fit_mode: str,
     rotate_degrees: int,
     card_size_mm: Tuple[float, float],
+    form_name: str,
+    print_dpi: int,
+    duplex: str,
+    auto_rotate: bool,
+    background_color_rgb: Tuple[int, int, int],
 ) -> None:
-    printable_width_px, printable_height_px, dpi_x, dpi_y = getPrinterCaps(printer_name)
+    orientation = "landscape" if card_size_mm[0] >= card_size_mm[1] else "portrait"
 
-    card_width_in = mmToInches(card_size_mm[0])
-    card_height_in = mmToInches(card_size_mm[1])
+    devmode = buildDevmodeForJob(
+        printer_name=printer_name,
+        form_name=form_name,
+        print_dpi=print_dpi,
+        duplex=duplex,
+        orientation=orientation,
+    )
 
-    target_width_px = int(round(card_width_in * dpi_x))
-    target_height_px = int(round(card_height_in * dpi_y))
+    printable_width_px, printable_height_px, _, _, offset_x_px, offset_y_px = getPrinterCaps(printer_name, devmode)
+    device_context = createPrinterDeviceContext(printer_name, devmode)
 
-    # Fallback: if driver reports weird DPI/caps, use printable area.
-    if target_width_px <= 0 or target_height_px <= 0:
-        target_width_px = printable_width_px
-        target_height_px = printable_height_px
+    # This matches Windows "Print Pictures": draw into the printable area (with physical offsets)
+    draw_left = int(offset_x_px)
+    draw_top = int(offset_y_px)
+    draw_right = draw_left + int(printable_width_px)
+    draw_bottom = draw_top + int(printable_height_px)
 
-    device_context = win32ui.CreateDC()
-    device_context.CreatePrinterDC(printer_name)
+    target_width_px = int(printable_width_px)
+    target_height_px = int(printable_height_px)
 
     for copy_index in range(max(1, copies)):
-        device_context.StartDoc(f"CardJob_{int(time.time())}_{copy_index+1}")
+        device_context.StartDoc(f"CardJob_{int(time.time())}_{copy_index + 1}")
 
         for page_image in pages:
             device_context.StartPage()
@@ -198,16 +348,12 @@ def printImagePages(
                 target_height_px=target_height_px,
                 fit_mode=fit_mode,
                 rotate_degrees=rotate_degrees,
+                auto_rotate=auto_rotate,
+                background_color_rgb=background_color_rgb,
             )
 
-            # Center inside printable area
-            left = int((printable_width_px - target_width_px) / 2)
-            top = int((printable_height_px - target_height_px) / 2)
-            right = left + target_width_px
-            bottom = top + target_height_px
-
             dib = ImageWin.Dib(prepared)
-            dib.draw(device_context.GetHandleOutput(), (left, top, right, bottom))
+            dib.draw(device_context.GetHandleOutput(), (draw_left, draw_top, draw_right, draw_bottom))
 
             device_context.EndPage()
 
@@ -220,7 +366,7 @@ def buildJobFromManifest(job_folder_path: Path, manifest: dict, default_printer_
     printer_name = str(manifest.get("printer_name") or default_printer_name)
     copies = int(manifest.get("copies", 1))
     duplex = str(manifest.get("duplex", "auto")).lower()
-    fit_mode = str(manifest.get("fit_mode", "fill")).lower()
+    fit_mode = str(manifest.get("fit_mode", "contain")).lower()
     rotate_degrees = normalizeDegrees(int(manifest.get("rotate_degrees", 0)))
 
     card_size = manifest.get("card_size_mm", {"width_mm": 85.6, "height_mm": 53.98})
@@ -235,6 +381,11 @@ def buildJobFromManifest(job_folder_path: Path, manifest: dict, default_printer_
     back_path = (job_folder_path / back_file) if back_file else None
     pdf_path = (job_folder_path / pdf_file) if pdf_file else None
 
+    form_name = str(manifest.get("form_name", "CR80"))
+    print_dpi = int(manifest.get("print_dpi", 300))
+    auto_rotate = bool(manifest.get("auto_rotate", True))
+    background_color_rgb = tuple(manifest.get("background_color_rgb", [255, 255, 255]))
+
     return PrintJob(
         source_path=job_folder_path,
         printer_name=printer_name,
@@ -246,6 +397,10 @@ def buildJobFromManifest(job_folder_path: Path, manifest: dict, default_printer_
         front_path=front_path,
         back_path=back_path,
         pdf_path=pdf_path,
+        form_name=form_name,
+        print_dpi=print_dpi,
+        auto_rotate=auto_rotate,
+        background_color_rgb=background_color_rgb,
     )
 
 
@@ -306,7 +461,7 @@ def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_
     pages: List[Image.Image] = []
 
     if job.pdf_path:
-        pdf_images = renderPdfToImages(job.pdf_path, dpi=300)
+        pdf_images = renderPdfToImages(job.pdf_path, dpi=int(job.print_dpi))
         if len(pdf_images) == 0:
             raise RuntimeError(f"PDF has no pages: {job.pdf_path}")
 
@@ -338,6 +493,11 @@ def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_
         fit_mode=job.fit_mode,
         rotate_degrees=job.rotate_degrees,
         card_size_mm=job.card_size_mm,
+        form_name=job.form_name,
+        print_dpi=job.print_dpi,
+        duplex=job.duplex,
+        auto_rotate=job.auto_rotate,
+        background_color_rgb=job.background_color_rgb,
     )
 
     # Move source to done
