@@ -14,6 +14,37 @@ import win32print
 import win32ui
 from PIL import Image, ImageOps, ImageWin
 
+# Static back printing (server-side toggle; not controlled by manifest/front-end).
+static_back_enabled = False  # Set False to print front only.
+static_back_image_path = Path(r"C:\card_hotfolder\backgrounds\static_back.png")
+
+# Back side rendering behavior.
+static_back_fit_mode = "fill"  # "contain" | "fill" | "stretch"
+static_back_rotate_degrees = 0  # 0 | 90 | 180 | 270
+static_back_auto_rotate = False  # Keep False to avoid unexpected rotation on the back.
+
+_static_back_cache = {"mtime": None, "image": None}
+
+
+def getStaticBackImage() -> Image.Image:
+    # Cache to avoid reloading file on every job.
+    if not static_back_image_path.exists():
+        raise FileNotFoundError(f"Static back image not found: {static_back_image_path}")
+
+    waitForFileReady(static_back_image_path)
+
+    current_mtime = static_back_image_path.stat().st_mtime
+    cached_image = _static_back_cache.get("image")
+
+    if _static_back_cache.get("mtime") == current_mtime and cached_image is not None:
+        return cached_image.copy()
+
+    with Image.open(static_back_image_path) as image_handle:
+        loaded_image = image_handle.convert("RGB").copy()
+
+    _static_back_cache["mtime"] = current_mtime
+    _static_back_cache["image"] = loaded_image
+    return loaded_image.copy()
 
 @dataclass
 class PrintJob:
@@ -313,6 +344,9 @@ def printImagePages(
     duplex: str,
     auto_rotate: bool,
     background_color_rgb: Tuple[int, int, int],
+    page_fit_modes: Optional[List[str]] = None,
+    page_rotate_degrees: Optional[List[int]] = None,
+    page_auto_rotate: Optional[List[bool]] = None,
 ) -> None:
     orientation = "landscape" if card_size_mm[0] >= card_size_mm[1] else "portrait"
 
@@ -339,16 +373,28 @@ def printImagePages(
     for copy_index in range(max(1, copies)):
         device_context.StartDoc(f"CardJob_{int(time.time())}_{copy_index + 1}")
 
-        for page_image in pages:
+        for page_index, page_image in enumerate(pages):
+            effective_fit_mode = fit_mode
+            if page_fit_modes and page_index < len(page_fit_modes):
+                effective_fit_mode = page_fit_modes[page_index]
+
+            effective_rotate_degrees = rotate_degrees
+            if page_rotate_degrees and page_index < len(page_rotate_degrees):
+                effective_rotate_degrees = page_rotate_degrees[page_index]
+
+            effective_auto_rotate = auto_rotate
+            if page_auto_rotate and page_index < len(page_auto_rotate):
+                effective_auto_rotate = page_auto_rotate[page_index]
+
             device_context.StartPage()
 
             prepared = prepareImageForCard(
                 image=page_image,
                 target_width_px=target_width_px,
                 target_height_px=target_height_px,
-                fit_mode=fit_mode,
-                rotate_degrees=rotate_degrees,
-                auto_rotate=auto_rotate,
+                fit_mode=effective_fit_mode,
+                rotate_degrees=effective_rotate_degrees,
+                auto_rotate=effective_auto_rotate,
                 background_color_rgb=background_color_rgb,
             )
 
@@ -459,32 +505,69 @@ def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_
     logging.info(f"Printing job from: {job.source_path} -> printer: {printer_name}")
 
     pages: List[Image.Image] = []
+    page_fit_modes: Optional[List[str]] = None
+    page_rotate_degrees: Optional[List[int]] = None
+    page_auto_rotate: Optional[List[bool]] = None
+    effective_duplex = job.duplex
+
+    use_static_back = bool(static_back_enabled)
 
     if job.pdf_path:
         pdf_images = renderPdfToImages(job.pdf_path, dpi=int(job.print_dpi))
         if len(pdf_images) == 0:
             raise RuntimeError(f"PDF has no pages: {job.pdf_path}")
 
-        if job.duplex == "false":
-            pages = [pdf_images[0]]
+        front_image = pdf_images[0]
+
+        if use_static_back:
+            try:
+                back_image = getStaticBackImage()
+            except Exception as exc:
+                logging.exception(f"Static back is enabled but could not be loaded: {exc}")
+                use_static_back = False
+
+        if use_static_back:
+            pages = [front_image, back_image]
+            effective_duplex = "true"
+
+            page_fit_modes = [job.fit_mode, str(static_back_fit_mode).lower()]
+            page_rotate_degrees = [job.rotate_degrees, normalizeDegrees(int(static_back_rotate_degrees))]
+            page_auto_rotate = [job.auto_rotate, bool(static_back_auto_rotate)]
         else:
-            # auto/true: use 2 pages if available
-            pages = pdf_images[:2] if len(pdf_images) >= 2 else [pdf_images[0]]
+            if job.duplex == "false":
+                pages = [front_image]
+            else:
+                pages = pdf_images[:2] if len(pdf_images) >= 2 else [front_image]
 
     else:
         if not job.front_path:
             raise RuntimeError("Missing front_path and pdf_path.")
 
-        # Close file handles immediately to avoid WinError 32 on move/rmtree.
         with Image.open(job.front_path) as image_handle:
             front_image = image_handle.convert("RGB").copy()
-        pages = [front_image]
 
-        if job.back_path:
-            with Image.open(job.back_path) as image_handle:
-                back_image = image_handle.convert("RGB").copy()
-            if job.duplex in ("auto", "true"):
-                pages = [front_image, back_image]
+        if use_static_back:
+            try:
+                back_image = getStaticBackImage()
+            except Exception as exc:
+                logging.exception(f"Static back is enabled but could not be loaded: {exc}")
+                use_static_back = False
+
+        if use_static_back:
+            pages = [front_image, back_image]
+            effective_duplex = "true"
+
+            page_fit_modes = [job.fit_mode, str(static_back_fit_mode).lower()]
+            page_rotate_degrees = [job.rotate_degrees, normalizeDegrees(int(static_back_rotate_degrees))]
+            page_auto_rotate = [job.auto_rotate, bool(static_back_auto_rotate)]
+        else:
+            pages = [front_image]
+
+            if job.back_path:
+                with Image.open(job.back_path) as image_handle:
+                    back_image_from_job = image_handle.convert("RGB").copy()
+                if job.duplex in ("auto", "true"):
+                    pages = [front_image, back_image_from_job]
 
     printImagePages(
         printer_name=printer_name,
@@ -495,12 +578,14 @@ def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_
         card_size_mm=job.card_size_mm,
         form_name=job.form_name,
         print_dpi=job.print_dpi,
-        duplex=job.duplex,
+        duplex=effective_duplex,
         auto_rotate=job.auto_rotate,
         background_color_rgb=job.background_color_rgb,
+        page_fit_modes=page_fit_modes,
+        page_rotate_degrees=page_rotate_degrees,
+        page_auto_rotate=page_auto_rotate,
     )
 
-    # Move source to done
     if job.source_path.is_dir():
         movePath(job.source_path, done_path)
     else:
