@@ -7,23 +7,137 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
 
 import win32con
 import win32print
 import win32ui
 from PIL import Image, ImageOps, ImageWin
 
-# Static back printing (server-side toggle; not controlled by manifest/front-end).
-static_back_enabled = False  # Set False to print front only.
+# Runtime globals loaded from JSON config.
+static_back_enabled = False
 static_back_image_path = Path(r"C:\card_hotfolder\backgrounds\static_back.png")
-
-# Back side rendering behavior.
 static_back_fit_mode = "fill"  # "contain" | "fill" | "stretch"
 static_back_rotate_degrees = 0  # 0 | 90 | 180 | 270
-static_back_auto_rotate = False  # Keep False to avoid unexpected rotation on the back.
+static_back_auto_rotate = False
 
 _static_back_cache = {"mtime": None, "image": None}
+
+
+DEFAULT_APP_CONFIG: Dict[str, Any] = {
+    "printer_defaults": {
+        "printer_name": "",
+        "copies": 1,
+        "duplex": "auto",
+        "fit_mode": "fill",
+        "rotate_degrees": 0,
+        "card_size_mm": {
+            "width_mm": 85.6,
+            "height_mm": 53.98,
+        },
+        "form_name": "CR80",
+        "print_dpi": 300,
+        "auto_rotate": True,
+        "background_color_rgb": [255, 255, 255],
+    },
+    "static_back": {
+        "enabled": False,
+        "image_path": r"C:\card_hotfolder\backgrounds\static_back.png",
+        "fit_mode": "fill",
+        "rotate_degrees": 0,
+        "auto_rotate": False,
+    },
+    "template_print": {
+        "front_image_path": r"C:\card_hotfolder\backgrounds\template_front.png",
+        "back_image_path": r"C:\card_hotfolder\backgrounds\template_back.png",
+        "mode": "front",
+        "copies": 1,
+        "fit_mode": "fill",
+        "rotate_degrees": 0,
+        "auto_rotate": True,
+        "background_color_rgb": [255, 255, 255],
+        "duplex": "true",
+        "form_name": "CR80",
+        "print_dpi": 300,
+        "card_size_mm": {
+            "width_mm": 85.6,
+            "height_mm": 53.98,
+        },
+    },
+    "job_detection": {
+        "enable_folder_manifest_jobs": True,
+        "enable_named_front_back_jobs": True,
+        "enable_single_file_jobs": True,
+    },
+}
+
+
+@dataclass
+class PrintJob:
+    source_path: Path
+    printer_name: str
+    copies: int
+    duplex: str  # "auto" | "true" | "false"
+    fit_mode: str  # "contain" | "fill" | "stretch"
+    rotate_degrees: int
+    card_size_mm: Tuple[float, float]  # (width_mm, height_mm)
+    front_path: Optional[Path] = None
+    back_path: Optional[Path] = None
+    pdf_path: Optional[Path] = None
+
+    # Backward-compatible defaults.
+    form_name: str = "CR80"
+    print_dpi: int = 300
+    auto_rotate: bool = True
+    background_color_rgb: Tuple[int, int, int] = (255, 255, 255)
+
+
+def deepMergeDicts(base_dict: Dict[str, Any], override_dict: Dict[str, Any]) -> Dict[str, Any]:
+    merged_dict = dict(base_dict)
+    for key, value in override_dict.items():
+        if isinstance(value, dict) and isinstance(merged_dict.get(key), dict):
+            merged_dict[key] = deepMergeDicts(merged_dict[key], value)
+        else:
+            merged_dict[key] = value
+    return merged_dict
+
+
+def saveJsonFile(file_path: Path, payload: Dict[str, Any]) -> None:
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(file_path, "w", encoding="utf-8") as file_handle:
+        json.dump(payload, file_handle, indent=2, ensure_ascii=False)
+
+
+def loadJsonFile(file_path: Path) -> Dict[str, Any]:
+    with open(file_path, "r", encoding="utf-8") as file_handle:
+        return json.load(file_handle)
+
+
+def ensureAppConfig(config_file_path: Path) -> Dict[str, Any]:
+    if not config_file_path.exists():
+        saveJsonFile(config_file_path, DEFAULT_APP_CONFIG)
+        return json.loads(json.dumps(DEFAULT_APP_CONFIG))
+
+    loaded_config = loadJsonFile(config_file_path)
+    return deepMergeDicts(DEFAULT_APP_CONFIG, loaded_config)
+
+
+def applyRuntimeConfig(app_config: Dict[str, Any]) -> None:
+    global static_back_enabled
+    global static_back_image_path
+    global static_back_fit_mode
+    global static_back_rotate_degrees
+    global static_back_auto_rotate
+
+    static_back_config = app_config.get("static_back", {})
+
+    static_back_enabled = bool(static_back_config.get("enabled", False))
+    static_back_image_path = Path(
+        str(static_back_config.get("image_path", r"C:\card_hotfolder\backgrounds\static_back.png"))
+    )
+    static_back_fit_mode = str(static_back_config.get("fit_mode", "fill")).lower()
+    static_back_rotate_degrees = normalizeDegrees(int(static_back_config.get("rotate_degrees", 0)))
+    static_back_auto_rotate = bool(static_back_config.get("auto_rotate", False))
 
 
 def getStaticBackImage() -> Image.Image:
@@ -46,24 +160,6 @@ def getStaticBackImage() -> Image.Image:
     _static_back_cache["image"] = loaded_image
     return loaded_image.copy()
 
-@dataclass
-class PrintJob:
-    source_path: Path
-    printer_name: str
-    copies: int
-    duplex: str  # "auto" | "true" | "false"
-    fit_mode: str  # "contain" | "fill" | "stretch"
-    rotate_degrees: int
-    card_size_mm: Tuple[float, float]  # (width_mm, height_mm)
-    front_path: Optional[Path] = None
-    back_path: Optional[Path] = None
-    pdf_path: Optional[Path] = None
-
-    # New (defaults keep backward compatibility)
-    form_name: str = "CR80"
-    print_dpi: int = 300
-    auto_rotate: bool = True
-    background_color_rgb: Tuple[int, int, int] = (255, 255, 255)
 
 def resolveFormName(printer_handle, requested_form_name: str) -> str:
     requested = (requested_form_name or "").strip().lower()
@@ -117,7 +213,7 @@ def buildDevmodeForJob(
             devmode.Orientation = win32con.DMORIENT_PORTRAIT
             devmode.Fields |= win32con.DM_ORIENTATION
 
-        # Duplex (may be ignored by card drivers, but doesn't hurt)
+        # Duplex
         try:
             if duplex in ("true", "auto"):
                 devmode.Duplex = win32con.DMDUP_VERTICAL
@@ -159,6 +255,7 @@ def createPrinterDeviceContext(printer_name: str, devmode):
     device_context.CreatePrinterDC(printer_name)
     return device_context
 
+
 def listPrinters() -> List[str]:
     printers = []
     flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
@@ -198,7 +295,7 @@ def waitForFileReady(file_path: Path, max_attempts: int = 50, delay_seconds: flo
 
 
 def waitForFolderReady(folder_path: Path, max_attempts: int = 50, delay_seconds: float = 0.2) -> None:
-    # Wait until folder contents settle (basic heuristic).
+    # Wait until folder contents settle.
     last_snapshot = None
     for _ in range(max_attempts):
         try:
@@ -259,7 +356,7 @@ def prepareImageForCard(
     auto_rotate: bool,
     background_color_rgb: Tuple[int, int, int],
 ) -> Image.Image:
-    # Handle EXIF orientation if present
+    # Handle EXIF orientation if present.
     image = ImageOps.exif_transpose(image)
 
     effective_rotate_degrees = rotate_degrees
@@ -361,7 +458,7 @@ def printImagePages(
     printable_width_px, printable_height_px, _, _, offset_x_px, offset_y_px = getPrinterCaps(printer_name, devmode)
     device_context = createPrinterDeviceContext(printer_name, devmode)
 
-    # This matches Windows "Print Pictures": draw into the printable area (with physical offsets)
+    # This matches Windows "Print Pictures": draw into the printable area.
     draw_left = int(offset_x_px)
     draw_top = int(offset_y_px)
     draw_right = draw_left + int(printable_width_px)
@@ -408,14 +505,18 @@ def printImagePages(
     device_context.DeleteDC()
 
 
-def buildJobFromManifest(job_folder_path: Path, manifest: dict, default_printer_name: str) -> PrintJob:
-    printer_name = str(manifest.get("printer_name") or default_printer_name)
-    copies = int(manifest.get("copies", 1))
-    duplex = str(manifest.get("duplex", "auto")).lower()
-    fit_mode = str(manifest.get("fit_mode", "contain")).lower()
-    rotate_degrees = normalizeDegrees(int(manifest.get("rotate_degrees", 0)))
+def buildJobFromManifest(job_folder_path: Path, manifest: dict, app_config: Dict[str, Any], default_printer_name: str) -> PrintJob:
+    printer_defaults = app_config.get("printer_defaults", {})
 
-    card_size = manifest.get("card_size_mm", {"width_mm": 85.6, "height_mm": 53.98})
+    merged_manifest = deepMergeDicts(printer_defaults, manifest)
+
+    printer_name = str(merged_manifest.get("printer_name") or default_printer_name)
+    copies = int(merged_manifest.get("copies", 1))
+    duplex = str(merged_manifest.get("duplex", "auto")).lower()
+    fit_mode = str(merged_manifest.get("fit_mode", "contain")).lower()
+    rotate_degrees = normalizeDegrees(int(merged_manifest.get("rotate_degrees", 0)))
+
+    card_size = merged_manifest.get("card_size_mm", {"width_mm": 85.6, "height_mm": 53.98})
     card_width_mm = float(card_size.get("width_mm", 85.6))
     card_height_mm = float(card_size.get("height_mm", 53.98))
 
@@ -427,10 +528,10 @@ def buildJobFromManifest(job_folder_path: Path, manifest: dict, default_printer_
     back_path = (job_folder_path / back_file) if back_file else None
     pdf_path = (job_folder_path / pdf_file) if pdf_file else None
 
-    form_name = str(manifest.get("form_name", "CR80"))
-    print_dpi = int(manifest.get("print_dpi", 300))
-    auto_rotate = bool(manifest.get("auto_rotate", True))
-    background_color_rgb = tuple(manifest.get("background_color_rgb", [255, 255, 255]))
+    form_name = str(merged_manifest.get("form_name", "CR80"))
+    print_dpi = int(merged_manifest.get("print_dpi", 300))
+    auto_rotate = bool(merged_manifest.get("auto_rotate", True))
+    background_color_rgb = tuple(merged_manifest.get("background_color_rgb", [255, 255, 255]))
 
     return PrintJob(
         source_path=job_folder_path,
@@ -450,9 +551,93 @@ def buildJobFromManifest(job_folder_path: Path, manifest: dict, default_printer_
     )
 
 
-def detectFrontBackByName(incoming_path: Path) -> List[PrintJob]:
+def buildJobFromSingleFile(file_path: Path, app_config: Dict[str, Any], default_printer_name: str) -> PrintJob:
+    printer_defaults = app_config.get("printer_defaults", {})
+    card_size = printer_defaults.get("card_size_mm", {"width_mm": 85.6, "height_mm": 53.98})
+
+    suffix = file_path.suffix.lower()
+
+    if suffix == ".pdf":
+        return PrintJob(
+            source_path=file_path,
+            printer_name=str(printer_defaults.get("printer_name") or default_printer_name),
+            copies=int(printer_defaults.get("copies", 1)),
+            duplex=str(printer_defaults.get("duplex", "auto")).lower(),
+            fit_mode=str(printer_defaults.get("fit_mode", "fill")).lower(),
+            rotate_degrees=normalizeDegrees(int(printer_defaults.get("rotate_degrees", 0))),
+            card_size_mm=(float(card_size.get("width_mm", 85.6)), float(card_size.get("height_mm", 53.98))),
+            pdf_path=file_path,
+            form_name=str(printer_defaults.get("form_name", "CR80")),
+            print_dpi=int(printer_defaults.get("print_dpi", 300)),
+            auto_rotate=bool(printer_defaults.get("auto_rotate", True)),
+            background_color_rgb=tuple(printer_defaults.get("background_color_rgb", [255, 255, 255])),
+        )
+
+    return PrintJob(
+        source_path=file_path,
+        printer_name=str(printer_defaults.get("printer_name") or default_printer_name),
+        copies=int(printer_defaults.get("copies", 1)),
+        duplex="false",
+        fit_mode=str(printer_defaults.get("fit_mode", "fill")).lower(),
+        rotate_degrees=normalizeDegrees(int(printer_defaults.get("rotate_degrees", 0))),
+        card_size_mm=(float(card_size.get("width_mm", 85.6)), float(card_size.get("height_mm", 53.98))),
+        front_path=file_path,
+        form_name=str(printer_defaults.get("form_name", "CR80")),
+        print_dpi=int(printer_defaults.get("print_dpi", 300)),
+        auto_rotate=bool(printer_defaults.get("auto_rotate", True)),
+        background_color_rgb=tuple(printer_defaults.get("background_color_rgb", [255, 255, 255])),
+    )
+
+
+def buildTemplateJob(app_config: Dict[str, Any], default_printer_name: str, root_path: Path, template_mode: Optional[str] = None) -> PrintJob:
+    template_config = app_config.get("template_print", {})
+    printer_defaults = app_config.get("printer_defaults", {})
+    card_size = template_config.get("card_size_mm", {"width_mm": 85.6, "height_mm": 53.98})
+
+    effective_mode = str(template_mode or template_config.get("mode", "front")).lower()
+    if effective_mode not in {"front", "front_back"}:
+        raise ValueError("template mode must be 'front' or 'front_back'")
+
+    front_image_path = Path(str(template_config.get("front_image_path", r"C:\card_hotfolder\backgrounds\template_front.png")))
+    back_image_path = Path(str(template_config.get("back_image_path", r"C:\card_hotfolder\backgrounds\template_back.png")))
+
+    if not front_image_path.exists():
+        raise FileNotFoundError(f"Template front image not found: {front_image_path}")
+
+    resolved_back_path = None
+    effective_duplex = "false"
+
+    if effective_mode == "front_back":
+        if not back_image_path.exists():
+            raise FileNotFoundError(f"Template back image not found: {back_image_path}")
+        resolved_back_path = back_image_path
+        effective_duplex = str(template_config.get("duplex", "true")).lower()
+
+    return PrintJob(
+        source_path=root_path,
+        printer_name=str(template_config.get("printer_name") or printer_defaults.get("printer_name") or default_printer_name),
+        copies=max(1, int(template_config.get("copies", 1))),
+        duplex=effective_duplex,
+        fit_mode=str(template_config.get("fit_mode", "fill")).lower(),
+        rotate_degrees=normalizeDegrees(int(template_config.get("rotate_degrees", 0))),
+        card_size_mm=(float(card_size.get("width_mm", 85.6)), float(card_size.get("height_mm", 53.98))),
+        front_path=front_image_path,
+        back_path=resolved_back_path,
+        form_name=str(template_config.get("form_name", printer_defaults.get("form_name", "CR80"))),
+        print_dpi=int(template_config.get("print_dpi", printer_defaults.get("print_dpi", 300))),
+        auto_rotate=bool(template_config.get("auto_rotate", printer_defaults.get("auto_rotate", True))),
+        background_color_rgb=tuple(
+            template_config.get("background_color_rgb", printer_defaults.get("background_color_rgb", [255, 255, 255]))
+        ),
+    )
+
+
+def detectFrontBackByName(incoming_path: Path, app_config: Dict[str, Any]) -> List[PrintJob]:
     jobs: List[PrintJob] = []
     images = [p for p in incoming_path.iterdir() if p.is_file() and p.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}]
+
+    printer_defaults = app_config.get("printer_defaults", {})
+    card_size = printer_defaults.get("card_size_mm", {"width_mm": 85.6, "height_mm": 53.98})
 
     front_map = {}
     back_map = {}
@@ -471,14 +656,18 @@ def detectFrontBackByName(incoming_path: Path) -> List[PrintJob]:
         jobs.append(
             PrintJob(
                 source_path=incoming_path,
-                printer_name="",
-                copies=1,
+                printer_name=str(printer_defaults.get("printer_name", "")),
+                copies=max(1, int(printer_defaults.get("copies", 1))),
                 duplex="true",
-                fit_mode="fill",
-                rotate_degrees=0,
-                card_size_mm=(85.6, 53.98),
+                fit_mode=str(printer_defaults.get("fit_mode", "fill")).lower(),
+                rotate_degrees=normalizeDegrees(int(printer_defaults.get("rotate_degrees", 0))),
+                card_size_mm=(float(card_size.get("width_mm", 85.6)), float(card_size.get("height_mm", 53.98))),
                 front_path=front_map[key],
                 back_path=back_map[key],
+                form_name=str(printer_defaults.get("form_name", "CR80")),
+                print_dpi=int(printer_defaults.get("print_dpi", 300)),
+                auto_rotate=bool(printer_defaults.get("auto_rotate", True)),
+                background_color_rgb=tuple(printer_defaults.get("background_color_rgb", [255, 255, 255])),
             )
         )
 
@@ -489,7 +678,6 @@ def movePath(source_path: Path, destination_root: Path) -> Path:
     destination_root.mkdir(parents=True, exist_ok=True)
     destination_path = destination_root / source_path.name
 
-    # Ensure unique destination
     if destination_path.exists():
         destination_path = destination_root / f"{source_path.stem}_{int(time.time())}{source_path.suffix}"
 
@@ -497,7 +685,7 @@ def movePath(source_path: Path, destination_root: Path) -> Path:
     return destination_path
 
 
-def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_path: Path) -> None:
+def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_path: Path, move_source: bool = True) -> None:
     printer_name = job.printer_name or default_printer_name
     if not printer_name:
         raise RuntimeError("No printer_name provided and no default_printer_name set.")
@@ -586,10 +774,11 @@ def processJob(job: PrintJob, default_printer_name: str, done_path: Path, error_
         page_auto_rotate=page_auto_rotate,
     )
 
-    if job.source_path.is_dir():
-        movePath(job.source_path, done_path)
-    else:
-        movePath(job.source_path, done_path)
+    if move_source:
+        if job.source_path.is_dir():
+            movePath(job.source_path, done_path)
+        else:
+            movePath(job.source_path, done_path)
 
 
 def main() -> None:
@@ -598,6 +787,31 @@ def main() -> None:
     parser.add_argument("--printer", default="", help="Default printer name (Windows)")
     parser.add_argument("--poll_seconds", type=float, default=0.8, help="Polling interval")
     parser.add_argument("--list_printers", action="store_true", help="List installed printers and exit")
+
+    # JSON config layer.
+    parser.add_argument(
+        "--config_json",
+        default="",
+        help="Path to editable app config JSON. Default: <root>\\config\\app_config.json",
+    )
+    parser.add_argument(
+        "--write_default_config",
+        action="store_true",
+        help="Write default JSON config and exit",
+    )
+
+    # Template print mode.
+    parser.add_argument(
+        "--print_template",
+        action="store_true",
+        help="Print template images defined in JSON and exit",
+    )
+    parser.add_argument(
+        "--template_mode",
+        default="",
+        choices=["", "front", "front_back"],
+        help="Override template mode: front | front_back",
+    )
 
     args = parser.parse_args()
 
@@ -609,123 +823,138 @@ def main() -> None:
 
     setupLogging(log_path)
 
+    config_file_path = Path(args.config_json) if str(args.config_json).strip() else (root_path / "config" / "app_config.json")
+
+    if args.write_default_config:
+        saveJsonFile(config_file_path, DEFAULT_APP_CONFIG)
+        print(f"Default config written to: {config_file_path}")
+        return
+
+    app_config = ensureAppConfig(config_file_path)
+    applyRuntimeConfig(app_config)
+
     if args.list_printers:
         for printer in listPrinters():
             print(printer)
         return
 
     default_printer_name = str(args.printer).strip()
+    if not default_printer_name:
+        default_printer_name = str(app_config.get("printer_defaults", {}).get("printer_name", "")).strip()
 
     incoming_path.mkdir(parents=True, exist_ok=True)
     done_path.mkdir(parents=True, exist_ok=True)
     error_path.mkdir(parents=True, exist_ok=True)
 
+    if args.print_template:
+        try:
+            template_job = buildTemplateJob(
+                app_config=app_config,
+                default_printer_name=default_printer_name,
+                root_path=root_path,
+                template_mode=(args.template_mode or None),
+            )
+            processJob(
+                job=template_job,
+                default_printer_name=default_printer_name,
+                done_path=done_path,
+                error_path=error_path,
+                move_source=False,
+            )
+            logging.info("Template print completed successfully.")
+        except Exception as exc:
+            logging.exception(f"Template print failed: {exc}")
+            raise
+        return
+
     logging.info(f"Hotfolder started. Watching: {incoming_path}")
+    logging.info(f"Config JSON: {config_file_path}")
+
     if default_printer_name:
         logging.info(f"Default printer: {default_printer_name}")
     else:
-        logging.info("No default printer set. Use --printer or manifest.json printer_name.")
+        logging.info("No default printer set. Use --printer, config JSON, or manifest.json printer_name.")
 
     processed_paths = set()
+    job_detection = app_config.get("job_detection", {})
 
     while True:
         try:
             # 1) Process job folders with manifest.json
-            for folder_path in incoming_path.iterdir():
-                if not folder_path.is_dir():
-                    continue
+            if bool(job_detection.get("enable_folder_manifest_jobs", True)):
+                for folder_path in incoming_path.iterdir():
+                    if not folder_path.is_dir():
+                        continue
 
-                manifest_path = folder_path / "manifest.json"
-                if not manifest_path.exists():
-                    continue
+                    manifest_path = folder_path / "manifest.json"
+                    if not manifest_path.exists():
+                        continue
 
-                if str(folder_path) in processed_paths:
-                    continue
+                    if str(folder_path) in processed_paths:
+                        continue
 
-                try:
-                    waitForFolderReady(folder_path)
-                    manifest = loadManifest(manifest_path)
-                    job = buildJobFromManifest(folder_path, manifest, default_printer_name)
-                    processJob(job, default_printer_name, done_path, error_path)
-                    processed_paths.add(str(folder_path))
-                except Exception as exc:
-                    logging.exception(f"Folder job failed: {folder_path} ({exc})")
-                    movePath(folder_path, error_path)
-                    processed_paths.add(str(folder_path))
+                    try:
+                        waitForFolderReady(folder_path)
+                        manifest = loadManifest(manifest_path)
+                        job = buildJobFromManifest(folder_path, manifest, app_config, default_printer_name)
+                        processJob(job, default_printer_name, done_path, error_path)
+                        processed_paths.add(str(folder_path))
+                    except Exception as exc:
+                        logging.exception(f"Folder job failed: {folder_path} ({exc})")
+                        movePath(folder_path, error_path)
+                        processed_paths.add(str(folder_path))
 
             # 2) Process paired front/back files (no folder)
-            paired_jobs = detectFrontBackByName(incoming_path)
-            for job in paired_jobs:
-                key = f"{job.front_path}|{job.back_path}"
-                if key in processed_paths:
-                    continue
+            if bool(job_detection.get("enable_named_front_back_jobs", True)):
+                paired_jobs = detectFrontBackByName(incoming_path, app_config)
+                for job in paired_jobs:
+                    key = f"{job.front_path}|{job.back_path}"
+                    if key in processed_paths:
+                        continue
 
-                try:
-                    job.printer_name = default_printer_name
-                    processJob(job, default_printer_name, done_path, error_path)
-                    # After printing, move the two files too
-                    if job.front_path and job.front_path.exists():
-                        movePath(job.front_path, done_path)
-                    if job.back_path and job.back_path.exists():
-                        movePath(job.back_path, done_path)
-                    processed_paths.add(key)
-                except Exception as exc:
-                    logging.exception(f"Paired job failed: {key} ({exc})")
-                    if job.front_path and job.front_path.exists():
-                        movePath(job.front_path, error_path)
-                    if job.back_path and job.back_path.exists():
-                        movePath(job.back_path, error_path)
-                    processed_paths.add(key)
+                    try:
+                        job.printer_name = job.printer_name or default_printer_name
+                        processJob(job, default_printer_name, done_path, error_path)
+                        if job.front_path and job.front_path.exists():
+                            movePath(job.front_path, done_path)
+                        if job.back_path and job.back_path.exists():
+                            movePath(job.back_path, done_path)
+                        processed_paths.add(key)
+                    except Exception as exc:
+                        logging.exception(f"Paired job failed: {key} ({exc})")
+                        if job.front_path and job.front_path.exists():
+                            movePath(job.front_path, error_path)
+                        if job.back_path and job.back_path.exists():
+                            movePath(job.back_path, error_path)
+                        processed_paths.add(key)
 
             # 3) Process single files (images or PDFs) in root
-            for file_path in incoming_path.iterdir():
-                if not file_path.is_file():
-                    continue
+            if bool(job_detection.get("enable_single_file_jobs", True)):
+                for file_path in incoming_path.iterdir():
+                    if not file_path.is_file():
+                        continue
 
-                if str(file_path) in processed_paths:
-                    continue
+                    if str(file_path) in processed_paths:
+                        continue
 
-                suffix = file_path.suffix.lower()
-                if suffix not in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf"}:
-                    continue
+                    suffix = file_path.suffix.lower()
+                    if suffix not in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf"}:
+                        continue
 
-                # Skip front/back markers (handled above)
-                stem_lower = file_path.stem.lower()
-                if stem_lower.endswith("__front") or stem_lower.endswith("_front") or stem_lower.endswith("-front"):
-                    continue
-                if stem_lower.endswith("__back") or stem_lower.endswith("_back") or stem_lower.endswith("-back"):
-                    continue
+                    stem_lower = file_path.stem.lower()
+                    if stem_lower.endswith("__front") or stem_lower.endswith("_front") or stem_lower.endswith("-front"):
+                        continue
+                    if stem_lower.endswith("__back") or stem_lower.endswith("_back") or stem_lower.endswith("-back"):
+                        continue
 
-                try:
-                    if suffix == ".pdf":
-                        job = PrintJob(
-                            source_path=file_path,
-                            printer_name=default_printer_name,
-                            copies=1,
-                            duplex="auto",
-                            fit_mode="fill",
-                            rotate_degrees=0,
-                            card_size_mm=(85.6, 53.98),
-                            pdf_path=file_path,
-                        )
-                    else:
-                        job = PrintJob(
-                            source_path=file_path,
-                            printer_name=default_printer_name,
-                            copies=1,
-                            duplex="false",
-                            fit_mode="fill",
-                            rotate_degrees=0,
-                            card_size_mm=(85.6, 53.98),
-                            front_path=file_path,
-                        )
-
-                    processJob(job, default_printer_name, done_path, error_path)
-                    processed_paths.add(str(file_path))
-                except Exception as exc:
-                    logging.exception(f"File job failed: {file_path} ({exc})")
-                    movePath(file_path, error_path)
-                    processed_paths.add(str(file_path))
+                    try:
+                        job = buildJobFromSingleFile(file_path, app_config, default_printer_name)
+                        processJob(job, default_printer_name, done_path, error_path)
+                        processed_paths.add(str(file_path))
+                    except Exception as exc:
+                        logging.exception(f"File job failed: {file_path} ({exc})")
+                        movePath(file_path, error_path)
+                        processed_paths.add(str(file_path))
 
         except Exception as exc:
             logging.exception(f"Loop error: {exc}")

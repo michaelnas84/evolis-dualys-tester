@@ -1,0 +1,46 @@
+{
+  "printer_defaults": {
+    "printer_name": "Evolis Dualys Series",
+    "copies": 1,
+    "duplex": "auto",
+    "fit_mode": "fill",
+    "rotate_degrees": 0,
+    "card_size_mm": {
+      "width_mm": 85.6,
+      "height_mm": 53.98
+    },
+    "form_name": "CR80",
+    "print_dpi": 300,
+    "auto_rotate": true,
+    "background_color_rgb": [255, 255, 255]
+  },
+  "static_back": {
+    "enabled": false,
+    "image_path": "C:\\card_hotfolder\\backgrounds\\static_back.png",
+    "fit_mode": "fill",
+    "rotate_degrees": 0,
+    "auto_rotate": false
+  },
+  "template_print": {
+    "front_image_path": "C:\\card_hotfolder\\backgrounds\\template_front.png",
+    "back_image_path": "C:\\card_hotfolder\\backgrounds\\template_back.png",
+    "mode": "front",
+    "copies": 1,
+    "fit_mode": "fill",
+    "rotate_degrees": 0,
+    "auto_rotate": true,
+    "background_color_rgb": [255, 255, 255],
+    "duplex": "true",
+    "form_name": "CR80",
+    "print_dpi": 300,
+    "card_size_mm": {
+      "width_mm": 85.6,
+      "height_mm": 53.98
+    }
+  },
+  "job_detection": {
+    "enable_folder_manifest_jobs": true,
+    "enable_named_front_back_jobs": true,
+    "enable_single_file_jobs": true
+  }
+}
