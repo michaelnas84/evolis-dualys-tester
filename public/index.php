@@ -51,16 +51,9 @@ declare(strict_types=1);
             <div class="glass_panel section_shadow rounded-3xl border border-white/60 p-8">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <div class="mb-3 inline-flex items-center gap-2 rounded-full bg-indigo-100 px-4 py-1.5 text-sm font-semibold text-indigo-700">
-                            Painel principal
-                        </div>
                         <h1 class="text-4xl font-black tracking-tight text-slate-900">
                             Central do Hotfolder
                         </h1>
-                        <p class="mt-3 max-w-3xl text-sm text-slate-600 lg:text-base">
-                            Gerencie a preparação da hotfolder em <span class="font-semibold">C:\card_hotfolder</span>,
-                            sincronize o script Python, controle as imagens padrão e edite o JSON de configuração.
-                        </p>
                     </div>
                 </div>
             </div>
@@ -69,14 +62,14 @@ declare(strict_types=1);
         <main class="grid grid-cols-1 gap-6 md:grid-cols-2">
             <a href="activation.php" class="card_enter glass_panel section_shadow rounded-3xl border border-white/60 p-8 transition hover:-translate-y-1 hover:border-indigo-200">
                 <div class="mb-4 inline-flex rounded-2xl bg-indigo-100 px-4 py-2 text-sm font-bold text-indigo-700">
-                    Ativação e sincronização
+                    Ativação
                 </div>
-                <h2 class="text-2xl font-black text-slate-900">Preparar hotfolder</h2>
+                <h2 class="text-2xl font-black text-slate-900">Jornada de ativação</h2>
                 <p class="mt-3 text-sm text-slate-600">
-                    Cria pastas obrigatórias, copia o Python para a hotfolder, cria o JSON e gerencia imagens padrão.
+                    Jornada com captura de imagem, nome do usuário, artista e música.
                 </p>
                 <div class="mt-6 text-sm font-bold text-indigo-700">
-                    Abrir painel de ativação →
+                    Ir para ativação →
                 </div>
             </a>
 
@@ -84,7 +77,7 @@ declare(strict_types=1);
                 <div class="mb-4 inline-flex rounded-2xl bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700">
                     Dashboard de configuração
                 </div>
-                <h2 class="text-2xl font-black text-slate-900">Editar app_config.json</h2>
+                <h2 class="text-2xl font-black text-slate-900">Configurações de impressão</h2>
                 <p class="mt-3 text-sm text-slate-600">
                     Ajuste impressora, verso estático, template, detecção de jobs e visualize a prévia do JSON em tempo real.
                 </p>

@@ -5,7 +5,7 @@ header('X-Frame-Options: SAMEORIGIN');
 
 /* English comments only */
 
-const PROJECT_ROOT_PATH = __DIR__;
+const PROJECT_ROOT_PATH = __DIR__ . '\\..';
 const HOTFOLDER_ROOT_PATH = 'C:\\card_hotfolder';
 const HOTFOLDER_IN_PATH = HOTFOLDER_ROOT_PATH . '\\in';
 const HOTFOLDER_DONE_PATH = HOTFOLDER_ROOT_PATH . '\\done';
@@ -17,7 +17,7 @@ const HOTFOLDER_BACKGROUNDS_PATH = HOTFOLDER_ROOT_PATH . '\\backgrounds';
 const HOTFOLDER_CONFIG_FILE_PATH = HOTFOLDER_CONFIG_PATH . '\\app_config.json';
 const HOTFOLDER_PRINTER_FILE_PATH = HOTFOLDER_ROOT_PATH . '\\card_hotfolder_printer.py';
 
-const PROJECT_PYTHON_SOURCE_FILE_PATH = PROJECT_ROOT_PATH . '..\\card_hotfolder\\card_hotfolder_printer.py';
+const PROJECT_PYTHON_SOURCE_FILE_PATH = PROJECT_ROOT_PATH . '\\..\\card_hotfolder\\card_hotfolder_printer.py';
 
 const TEMPLATE_FRONT_FILE_NAME = 'template_front.png';
 const TEMPLATE_BACK_FILE_NAME = 'template_back.png';
