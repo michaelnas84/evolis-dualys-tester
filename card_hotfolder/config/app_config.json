@@ -1,6 +1,6 @@
 {
   "printer_defaults": {
-    "printer_name": "Evolis Dualys Series",
+    "printer_name": "Evolis Dualys",
     "copies": 1,
     "duplex": "auto",
     "fit_mode": "fill",

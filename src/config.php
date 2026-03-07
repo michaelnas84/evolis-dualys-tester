@@ -6,7 +6,7 @@ return [
     'hotfolder_in_path' => 'C:\\card_hotfolder\\in',
 
     // Used in manifest.json (your hotfolder script can read it).
-    'default_printer_name' => 'Evolis Dualys Series',
+    'default_printer_name' => 'Evolis Dualys',
 
     // Safety limits
     'max_image_bytes' => 8 * 1024 * 1024,

@@ -25,7 +25,7 @@ REM ==============================
 
 echo Iniciando Card Hotfolder Printer...
 
-start "Card Hotfolder Printer" cmd /k py -3.11 C:\card_hotfolder\card_hotfolder_printer.py --root C:\card_hotfolder --printer "Evolis Dualys Series"
+start "Card Hotfolder Printer" cmd /k py -3.11 C:\card_hotfolder\card_hotfolder_printer.py --root C:\card_hotfolder --printer "Evolis Dualys"
 
 timeout /t 2 >nul
 

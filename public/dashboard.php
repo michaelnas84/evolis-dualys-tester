@@ -5,7 +5,7 @@ function getPrinterProfiles(): array
 {
     return [
         'evolis_dualys_series' => [
-            'label' => 'Evolis Dualys Series',
+            'label' => 'Evolis Dualys',
             'project_python_relative_path' => 'card_hotfolder\\evolis_dualys_series\\card_hotfolder_printer.py',
         ],
         'zebra_zc300' => [

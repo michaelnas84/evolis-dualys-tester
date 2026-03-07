@@ -4,7 +4,7 @@
 
 ```bash
 py -3.11 -m pip install flask flask-cors rembg pillow onnxruntime pywin32
-py -3.11 C:\card_hotfolder\card_hotfolder_printer.py --root C:\card_hotfolder --printer "Evolis Dualys Series"
+py -3.11 C:\card_hotfolder\card_hotfolder_printer.py --root C:\card_hotfolder --printer "Evolis Dualys"
 cd public
 php -S 127.0.0.1:8000
 ```
