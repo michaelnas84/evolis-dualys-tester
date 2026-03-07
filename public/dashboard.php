@@ -1,6 +1,47 @@
 <?php
 declare(strict_types=1);
 
+function getPrinterProfiles(): array
+{
+    return [
+        'evolis_dualys_series' => [
+            'label' => 'Evolis Dualys Series',
+            'project_python_relative_path' => 'card_hotfolder\\evolis_dualys_series\\card_hotfolder_printer.py',
+        ],
+        'zebra_zc300' => [
+            'label' => 'Zebra ZC300',
+            'project_python_relative_path' => 'card_hotfolder\\zebra_zc300\\card_hotfolder_printer.py',
+        ],
+    ];
+}
+
+function syncHotfolderPython(string $printer_profile, string $hotfolder_root_path): string
+{
+    $printer_profiles = getPrinterProfiles();
+
+    if (!isset($printer_profiles[$printer_profile])) {
+        throw new RuntimeException('Invalid printer_profile: ' . $printer_profile);
+    }
+
+    $project_root_path = __DIR__;
+    $source_python_path = $project_root_path . DIRECTORY_SEPARATOR . $printer_profiles[$printer_profile]['project_python_relative_path'];
+    $target_python_path = $hotfolder_root_path . '\\card_hotfolder_printer.py';
+
+    if (!is_file($source_python_path)) {
+        throw new RuntimeException('Python source file not found: ' . $source_python_path);
+    }
+
+    if (!is_dir($hotfolder_root_path) && !mkdir($hotfolder_root_path, 0777, true) && !is_dir($hotfolder_root_path)) {
+        throw new RuntimeException('Could not create hotfolder root: ' . $hotfolder_root_path);
+    }
+
+    if (!copy($source_python_path, $target_python_path)) {
+        throw new RuntimeException('Could not copy Python file to hotfolder.');
+    }
+
+    return $target_python_path;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_template_batch') {
     header('Content-Type: application/json; charset=utf-8');
 
@@ -15,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
             throw new RuntimeException('Invalid JSON body.');
         }
 
+        $printer_profile = (string) ($payload['printer_profile'] ?? 'evolis_dualys_series');
         $template_mode = (string) ($payload['template_mode'] ?? 'front');
         $template_copies = (int) ($payload['template_copies'] ?? 1);
 
@@ -27,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
         }
 
         $hotfolder_root_path = 'C:\\card_hotfolder';
-        $python_script_path = $hotfolder_root_path . '\\card_hotfolder_printer.py';
+        $python_script_path = syncHotfolderPython($printer_profile, $hotfolder_root_path);
 
         if (!file_exists($python_script_path)) {
             throw new RuntimeException('Python file not found in hotfolder: ' . $python_script_path);
@@ -54,28 +96,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
 
             @exec($command . ' 2>&1', $output_lines, $exit_code);
 
-            if ($exit_code === 0) {
-                $executed_command = $command;
-                $last_output = $output_lines;
-                $last_exit_code = $exit_code;
-                break;
-            }
-
             $executed_command = $command;
             $last_output = $output_lines;
             $last_exit_code = $exit_code;
+
+            if ($exit_code === 0) {
+                break;
+            }
         }
 
         if ($last_exit_code !== 0) {
             throw new RuntimeException(
                 "Could not execute template print. Last command: {$executed_command}. Output: " .
-                implode(" | ", $last_output)
+                implode(' | ', $last_output)
             );
         }
 
         echo json_encode([
             'success' => true,
             'message' => 'Template batch sent to printer successfully.',
+            'printer_profile' => $printer_profile,
             'template_mode' => $template_mode,
             'template_copies' => $template_copies,
             'executed_command' => $executed_command,
@@ -91,6 +131,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
         exit;
     }
 }
+
+$printer_profiles = getPrinterProfiles();
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -211,8 +253,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
                         <p class="mt-3 max-w-4xl text-sm text-slate-600 lg:text-base">
                             Esta tela centraliza a preparação da estrutura em
                             <span class="font-semibold">C:\card_hotfolder</span>,
-                            a cópia do Python, o gerenciamento das imagens padrão, a edição direta do
-                            <span class="font-semibold">app_config.json</span>
+                            a cópia do Python correto por perfil de impressora, o gerenciamento das imagens padrão,
+                            a edição direta do <span class="font-semibold">app_config.json</span>
                             e a pré-impressão em lote do cartão base.
                         </p>
                     </div>
@@ -228,28 +270,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
 
         <main class="space-y-6">
             <section class="card_enter glass_panel section_shadow rounded-3xl border border-white/60 p-6">
-                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
                     <div>
                         <h2 class="section_title">Ações rápidas</h2>
                         <p class="section_subtitle">
-                            Use estes botões para preparar a hotfolder, sincronizar o Python e salvar as alterações do painel.
+                            Use estes botões para preparar a hotfolder, sincronizar o Python do perfil selecionado e salvar as alterações do painel.
                         </p>
                     </div>
 
-                    <div class="flex flex-wrap gap-3">
-                        <button id="save_button" class="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-500">
-                            Salvar configurações
-                        </button>
-                        <button id="reload_button" class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                            Recarregar tudo
-                        </button>
-                        <button id="prepare_hotfolder_button" class="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-500">
-                            Criar estrutura + copiar Python + criar config
-                        </button>
-                        <button id="copy_python_button" class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800">
-                            Copiar somente o Python
-                        </button>
+                    <div class="input_block">
+                        <label for="printer_profile" class="field_label">Perfil da impressora</label>
+                        <select id="printer_profile" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                            <?php foreach ($printer_profiles as $profile_key => $profile_data): ?>
+                                <option value="<?= htmlspecialchars($profile_key, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= htmlspecialchars($profile_data['label'], ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="field_help">
+                            Esse perfil define qual Python será copiado para a hotfolder e qual estrutura base do JSON será usada.
+                        </p>
                     </div>
+                </div>
+
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <button id="save_button" class="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-500">
+                        Salvar configurações
+                    </button>
+                    <button id="reload_button" class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                        Recarregar tudo
+                    </button>
+                    <button id="prepare_hotfolder_button" class="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-500">
+                        Criar estrutura + copiar Python + criar config
+                    </button>
+                    <button id="copy_python_button" class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800">
+                        Copiar somente o Python
+                    </button>
                 </div>
             </section>
 
@@ -723,8 +779,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
     <div id="toast_container" class="fixed bottom-5 right-5 z-50 flex w-full max-w-sm flex-col gap-3"></div>
 
     <script>
+        const printer_profile_presets = {
+            evolis_dualys_series: {
+                printer_profile: "evolis_dualys_series",
+                printer_defaults: {
+                    printer_is_duplex: false
+                },
+                template_print: {
+                    printer_is_duplex: false
+                }
+            },
+            zebra_zc300: {
+                printer_profile: "zebra_zc300",
+                printer_defaults: {
+                    printer_vendor: "zebra",
+                    printer_model: "zc300",
+                    printer_is_duplex: false,
+                    card_canvas_px: {
+                        width_px: 1006,
+                        height_px: 640
+                    },
+                    rotate_180_mode: "none",
+                    card_source: "auto",
+                    card_destination: "output",
+                    enable_encoding: false
+                },
+                template_print: {
+                    printer_is_duplex: false,
+                    card_canvas_px: {
+                        width_px: 1006,
+                        height_px: 640
+                    },
+                    rotate_180_mode: "none",
+                    card_source: "auto",
+                    card_destination: "output",
+                    enable_encoding: false
+                }
+            }
+        };
+
         function getElement(element_id) {
             return document.getElementById(element_id);
+        }
+
+        function getSelectedPrinterProfile() {
+            return getElement("printer_profile").value || "evolis_dualys_series";
+        }
+
+        function deepClone(value) {
+            if (Array.isArray(value)) {
+                return value.map((item) => deepClone(item));
+            }
+
+            if (value && typeof value === "object") {
+                const cloned_object = {};
+                for (const [key_name, key_value] of Object.entries(value)) {
+                    cloned_object[key_name] = deepClone(key_value);
+                }
+                return cloned_object;
+            }
+
+            return value;
+        }
+
+        function mergeDeep(base_object, override_object) {
+            const merged_object = deepClone(base_object);
+
+            for (const [key_name, value] of Object.entries(override_object)) {
+                if (
+                    value &&
+                    typeof value === "object" &&
+                    !Array.isArray(value) &&
+                    merged_object[key_name] &&
+                    typeof merged_object[key_name] === "object" &&
+                    !Array.isArray(merged_object[key_name])
+                ) {
+                    merged_object[key_name] = mergeDeep(merged_object[key_name], value);
+                } else {
+                    merged_object[key_name] = deepClone(value);
+                }
+            }
+
+            return merged_object;
         }
 
         function showToast(message_text, toast_type = "success") {
@@ -877,7 +1013,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
             const files_entries = [
                 ["app_config.json", "hotfolder_config_file_path"],
                 ["card_hotfolder_printer.py", "hotfolder_printer_file_path"],
-                ["Python do projeto", "project_python_source_file_path"]
+                ["Python do projeto (perfil ativo)", "project_python_source_file_path"]
             ];
 
             paths_status_container.innerHTML = paths_entries.map(([label_text, key_name]) => `
@@ -906,6 +1042,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
         }
 
         function populateForm(config_payload) {
+            const printer_profile = config_payload.printer_profile ?? "evolis_dualys_series";
+            getElement("printer_profile").value = printer_profile;
+
             const printer_defaults = config_payload.printer_defaults ?? {};
             const static_back = config_payload.static_back ?? {};
             const template_print = config_payload.template_print ?? {};
@@ -963,7 +1102,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
         }
 
         function buildConfigPayload() {
-            return {
+            const printer_profile = getSelectedPrinterProfile();
+
+            const common_payload = {
+                printer_profile,
                 printer_defaults: {
                     printer_name: getElement("printer_name").value ?? "",
                     copies: Math.max(1, getNumberValue("copies", 1)),
@@ -1017,6 +1159,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
                     enable_single_file_jobs: getBooleanFromInput("enable_single_file_jobs")
                 }
             };
+
+            const profile_preset = printer_profile_presets[printer_profile] ?? printer_profile_presets.evolis_dualys_series;
+            return mergeDeep(profile_preset, common_payload);
         }
 
         function refreshJsonPreview() {
@@ -1069,7 +1214,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
 
         async function loadDashboard(show_success_toast = false) {
             try {
-                const response = await fetch("api/api_load_config.php", {
+                const printer_profile = getSelectedPrinterProfile();
+                const response = await fetch(`api/api_load_config.php?printer_profile=${encodeURIComponent(printer_profile)}`, {
                     method: "GET",
                     headers: {
                         "Accept": "application/json"
@@ -1134,13 +1280,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
             }
         }
 
-        async function prepareHotfolder(success_message = "Hotfolder preparada com sucesso.") {
+        async function prepareHotfolder(success_message = "Hotfolder preparada com sucesso.", copy_python_only = false) {
             try {
                 const response = await fetch("api/api_hotfolder_setup.php", {
                     method: "POST",
                     headers: {
+                        "Content-Type": "application/json",
                         "Accept": "application/json"
-                    }
+                    },
+                    body: JSON.stringify({
+                        printer_profile: getSelectedPrinterProfile(),
+                        copy_python_only
+                    })
                 });
 
                 const response_payload = await response.json();
@@ -1161,7 +1312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
         }
 
         async function copyOnlyPython() {
-            await prepareHotfolder("Requisição enviada pelo endpoint único de setup.");
+            await prepareHotfolder("Python da impressora copiado com sucesso.", true);
         }
 
         async function uploadAsset(asset_key) {
@@ -1175,6 +1326,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
             const form_data = new FormData();
             form_data.append("asset_key", asset_key);
             form_data.append("asset_file", input_element.files[0]);
+            form_data.append("printer_profile", getSelectedPrinterProfile());
 
             try {
                 const response = await fetch("api/api_asset_upload.php", {
@@ -1208,7 +1360,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
                         "Content-Type": "application/json",
                         "Accept": "application/json"
                     },
-                    body: JSON.stringify({ asset_key })
+                    body: JSON.stringify({
+                        asset_key,
+                        printer_profile: getSelectedPrinterProfile()
+                    })
                 });
 
                 const response_payload = await response.json();
@@ -1249,6 +1404,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
                         "Accept": "application/json"
                     },
                     body: JSON.stringify({
+                        printer_profile: getSelectedPrinterProfile(),
                         template_mode: getElement("template_mode").value,
                         template_copies: Math.max(1, getNumberValue("template_copies", 1))
                     })
@@ -1272,9 +1428,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
                 refreshTemplateBatchSummary();
             });
 
-            document.addEventListener("change", () => {
-                refreshJsonPreview();
-                refreshTemplateBatchSummary();
+            document.addEventListener("change", (event) => {
+                if (event.target && event.target.id === "printer_profile") {
+                    refreshJsonPreview();
+                } else {
+                    refreshJsonPreview();
+                    refreshTemplateBatchSummary();
+                }
             });
         }
 
@@ -1287,6 +1447,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
             getElement("apply_template_batch_to_form_button").addEventListener("click", applyTemplateBatchToForm);
             getElement("save_template_batch_button").addEventListener("click", saveTemplateBatchToConfig);
             getElement("print_template_batch_button").addEventListener("click", printTemplateBatch);
+            getElement("printer_profile").addEventListener("change", () => {
+                refreshJsonPreview();
+                loadDashboard(false);
+            });
 
             bindToggle("auto_rotate_toggle", "auto_rotate");
             bindToggle("static_back_enabled_toggle", "static_back_enabled");
