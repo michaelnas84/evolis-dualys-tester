@@ -1,47 +1,133 @@
 {
-    "photo_box": {
-        "x": 506,
-        "y": 576,
-        "width": 366,
-        "height": 433,
-        "oversize_factor": 1.08
+  "print_mode": "front_and_back",
+  "compose_back_with_dynamic_content": false,
+  "photo_box": {
+    "x": 454,
+    "y": 478,
+    "width": 464,
+    "height": 545,
+    "oversize_factor": 1.08
+  },
+  "text_fields": {
+    "person_name": {
+      "box": {
+        "x": 200,
+        "y": 1064,
+        "width": 978,
+        "height": 101
+      },
+      "max_chars": 26,
+      "font_size": 54
     },
-    "text_fields": {
+    "artist_name": {
+      "box": {
+        "x": 200,
+        "y": 1262,
+        "width": 472,
+        "height": 54
+      },
+      "max_chars": 20,
+      "font_size": 26
+    },
+    "track_name": {
+      "box": {
+        "x": 698,
+        "y": 1262,
+        "width": 479,
+        "height": 51
+      },
+      "max_chars": 22,
+      "font_size": 26
+    }
+  },
+  "side_layouts": {
+    "front": {
+      "photo_box": {
+        "x": 454,
+        "y": 478,
+        "width": 464,
+        "height": 545,
+        "oversize_factor": 1.08
+      },
+      "text_fields": {
         "person_name": {
-            "box": {
-                "x": 276,
-                "y": 1053,
-                "width": 826,
-                "height": 98
-            },
-            "max_chars": 26,
-            "font_size": 54
+          "box": {
+            "x": 200,
+            "y": 1064,
+            "width": 978,
+            "height": 101
+          },
+          "max_chars": 26,
+          "font_size": 54
         },
         "artist_name": {
-            "box": {
-                "x": 274,
-                "y": 1223,
-                "width": 404,
-                "height": 51
-            },
-            "max_chars": 20,
-            "font_size": 26
+          "box": {
+            "x": 200,
+            "y": 1262,
+            "width": 472,
+            "height": 54
+          },
+          "max_chars": 20,
+          "font_size": 26
         },
         "track_name": {
-            "box": {
-                "x": 700,
-                "y": 1223,
-                "width": 405,
-                "height": 51
-            },
-            "max_chars": 22,
-            "font_size": 26
+          "box": {
+            "x": 698,
+            "y": 1262,
+            "width": 479,
+            "height": 51
+          },
+          "max_chars": 22,
+          "font_size": 26
         }
+      }
     },
-    "font_file_path": "C:\\\\projetos\\\\evolis-dualys-tester\\\\public\\\\fonts\\\\DejaVuSans-Bold.ttf",
-    "text_color_rgb": {
-        "r": 20,
-        "g": 20,
-        "b": 20
+    "back": {
+      "photo_box": {
+        "x": 454,
+        "y": 478,
+        "width": 464,
+        "height": 545,
+        "oversize_factor": 1.08
+      },
+      "text_fields": {
+        "person_name": {
+          "box": {
+            "x": 200,
+            "y": 1064,
+            "width": 978,
+            "height": 101
+          },
+          "max_chars": 26,
+          "font_size": 54
+        },
+        "artist_name": {
+          "box": {
+            "x": 200,
+            "y": 1262,
+            "width": 472,
+            "height": 54
+          },
+          "max_chars": 20,
+          "font_size": 26
+        },
+        "track_name": {
+          "box": {
+            "x": 698,
+            "y": 1262,
+            "width": 479,
+            "height": 51
+          },
+          "max_chars": 22,
+          "font_size": 26
+        }
+      }
     }
+  },
+  "font_file_path": "C:\\projetos\\evolis-dualys-tester\\public\\fonts\\DejaVuSans-Bold.ttf",
+  "text_color_rgb": {
+    "r": 20,
+    "g": 20,
+    "b": 20
+  }
 }

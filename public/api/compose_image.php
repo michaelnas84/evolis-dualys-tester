@@ -7,6 +7,18 @@ $config = require __DIR__ . '/../../src/config.php';
 require __DIR__ . '/../../src/helpers.php';
 require __DIR__ . '/../../src/compositor_helpers.php';
 
+function saveComposedImageFromDataUrl(string $image_data_url, int $max_image_bytes, string $output_file_path): void
+{
+    $parsed_image = parseDataUrlImage($image_data_url);
+    $image_binary_data = (string)$parsed_image['binary_data'];
+
+    if (strlen($image_binary_data) > $max_image_bytes) {
+        throw new RuntimeException('Composed image too large: ' . basename($output_file_path));
+    }
+
+    writeFileAtomic($output_file_path, $image_binary_data);
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['ok' => false, 'error' => 'Method not allowed.'], 405);
 }
@@ -48,12 +60,14 @@ try {
     if (!in_array($photo_mime_type, $allowed_image_mime_types, true)) {
         throw new RuntimeException('Unsupported photo mime_type: ' . $photo_mime_type);
     }
+
     if (strlen($photo_binary_data) > $max_image_bytes) {
         throw new RuntimeException('Photo image too large.');
     }
 
     $compositor_config = loadCompositorConfig();
-    $result = composeFinalImageDataUrl(
+
+    $result = composeFinalImageDataUrls(
         $compositor_config,
         $photo_data_url,
         $person_name,
@@ -62,35 +76,69 @@ try {
         $preview_only
     );
 
-    // Preview do dashboard: mantém data_url (ok ser grande, uso pontual)
+    $front_image_data_url = (string)($result['front_image_data_url'] ?? $result['final_image_data_url'] ?? '');
+    $back_image_data_url = (string)($result['back_image_data_url'] ?? '');
+    $frame_pair_key = (string)($result['frame_pair_key'] ?? '');
+    $front_frame_file_name = (string)($result['front_frame_file_name'] ?? $result['frame_file_name'] ?? '');
+    $back_frame_file_name = (string)($result['back_frame_file_name'] ?? '');
+
+    if ($front_image_data_url === '') {
+        throw new RuntimeException('Composer result is missing front image data.');
+    }
+
     if ($preview_only) {
         jsonResponse([
             'ok' => true,
-            'final_image_data_url' => (string)$result['final_image_data_url'],
-            'frame_file_name' => (string)$result['frame_file_name'],
+            'front_image_data_url' => $front_image_data_url,
+            'back_image_data_url' => $back_image_data_url,
+            'frame_pair_key' => $frame_pair_key,
+            'front_frame_file_name' => $front_frame_file_name,
+            'back_frame_file_name' => $back_frame_file_name,
+
+            // Backward compatibility
+            'final_image_data_url' => $front_image_data_url,
+            'frame_file_name' => $front_frame_file_name,
         ]);
     }
 
-    // Fluxo do kiosk: NÃO devolve base64. Salva no servidor e retorna só a chave.
-    $final_parsed = parseDataUrlImage((string)$result['final_image_data_url']);
-    $final_binary = (string)$final_parsed['binary_data'];
+    $print_output_directory = (string)($config['hot_folder_directory'] ?? (__DIR__ . '/../../storage/composed'));
+    ensureDirectoryExists($print_output_directory);
 
-    if (strlen($final_binary) > $max_image_bytes) {
-        throw new RuntimeException('Final image too large.');
+    $print_job_key = 'print_job_' . date('Ymd_His') . '_' . bin2hex(random_bytes(8));
+
+    $front_output_file_name = $print_job_key . '_front.png';
+    $front_output_file_path = joinPath($print_output_directory, $front_output_file_name);
+
+    saveComposedImageFromDataUrl(
+        $front_image_data_url,
+        $max_image_bytes,
+        $front_output_file_path
+    );
+
+    $back_output_file_name = '';
+    if ($back_image_data_url !== '') {
+        $back_output_file_name = $print_job_key . '_back.png';
+        $back_output_file_path = joinPath($print_output_directory, $back_output_file_name);
+
+        saveComposedImageFromDataUrl(
+            $back_image_data_url,
+            $max_image_bytes,
+            $back_output_file_path
+        );
     }
-
-    $composed_dir = __DIR__ . '/../../storage/composed';
-    ensureDirectoryExists($composed_dir);
-
-    $composed_file_name = 'composed_' . date('Ymd_His') . '_' . bin2hex(random_bytes(8)) . '.png';
-    $composed_file_path = joinPath($composed_dir, $composed_file_name);
-
-    writeFileAtomic($composed_file_path, $final_binary);
 
     jsonResponse([
         'ok' => true,
-        'composed_image_key' => $composed_file_name,
-        'frame_file_name' => (string)$result['frame_file_name'],
+        'print_job_key' => $print_job_key,
+        'front_image_key' => $front_output_file_name,
+        'back_image_key' => $back_output_file_name,
+        'frame_pair_key' => $frame_pair_key,
+        'front_frame_file_name' => $front_frame_file_name,
+        'back_frame_file_name' => $back_frame_file_name,
+
+        // Backward compatibility
+        'frame_file_name' => $front_frame_file_name,
+        'composed_image_key' => $front_output_file_name,
     ]);
 } catch (Throwable $exception) {
     jsonResponse([

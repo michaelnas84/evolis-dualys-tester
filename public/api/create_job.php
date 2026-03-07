@@ -37,11 +37,13 @@ $back_image_data_url = (string)($payload['back_image_data_url'] ?? '');
 if (!in_array($print_mode, ['front_only', 'front_and_back'], true)) {
     jsonResponse(['ok' => false, 'error' => 'Invalid print_mode.'], 400);
 }
+
 if ($front_image_data_url === '' && $front_composed_image_key === '') {
     jsonResponse(['ok' => false, 'error' => 'Missing front image (data_url or composed key).'], 400);
 }
-if ($print_mode === 'front_and_back' && $back_image_data_url === '') {
-    jsonResponse(['ok' => false, 'error' => 'Missing back_image_data_url for front_and_back.'], 400);
+
+if ($print_mode === 'front_and_back' && $back_image_data_url === '' && $back_composed_image_key === '') {
+    jsonResponse(['ok' => false, 'error' => 'Missing back image (data_url or composed key) for front_and_back.'], 400);
 }
 
 $allowed_image_mime_types = (array)$config['allowed_image_mime_types'];
@@ -76,7 +78,7 @@ try {
             throw new RuntimeException('Failed to read composed image.');
         }
 
-        // Apaga depois de consumir para não acumular
+        // Delete after consume to avoid accumulation
         @unlink($composed_path);
     } else {
         $front_parsed = parseDataUrlImage($front_image_data_url);
@@ -87,6 +89,7 @@ try {
     if (!in_array($front_mime_type, $allowed_image_mime_types, true)) {
         throw new RuntimeException('Unsupported front image mime_type: ' . $front_mime_type);
     }
+
     if (strlen($front_binary_data) > $max_image_bytes) {
         throw new RuntimeException('Front image too large.');
     }
@@ -99,13 +102,39 @@ try {
     $back_file_name = null;
 
     if ($print_mode === 'front_and_back') {
-        $back_parsed = parseDataUrlImage($back_image_data_url);
-        $back_mime_type = (string)$back_parsed['mime_type'];
-        $back_binary_data = (string)$back_parsed['binary_data'];
+        $back_binary_data = '';
+        $back_mime_type = 'image/png';
+
+        if ($back_composed_image_key !== '') {
+            if (preg_match('/[\/\\\\]/', $back_composed_image_key)) {
+                throw new RuntimeException('Invalid composed key.');
+            }
+
+            $composed_dir = __DIR__ . '/../../storage/composed';
+            $composed_path = joinPath($composed_dir, $back_composed_image_key);
+
+            if (!is_file($composed_path)) {
+                throw new RuntimeException('Back composed image not found.');
+            }
+
+            $back_binary_data = (string)file_get_contents($composed_path);
+
+            if ($back_binary_data === '') {
+                throw new RuntimeException('Failed to read back composed image.');
+            }
+
+            // Delete after consume to avoid accumulation
+            @unlink($composed_path);
+        } else {
+            $back_parsed = parseDataUrlImage($back_image_data_url);
+            $back_mime_type = (string)$back_parsed['mime_type'];
+            $back_binary_data = (string)$back_parsed['binary_data'];
+        }
 
         if (!in_array($back_mime_type, $allowed_image_mime_types, true)) {
             throw new RuntimeException('Unsupported back image mime_type: ' . $back_mime_type);
         }
+
         if (strlen($back_binary_data) > $max_image_bytes) {
             throw new RuntimeException('Back image too large.');
         }
@@ -134,7 +163,10 @@ try {
     }
 
     $manifest_path = joinPath($job_folder_path, 'manifest.json');
-    writeFileAtomic($manifest_path, json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    writeFileAtomic(
+        $manifest_path,
+        json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+    );
 
     jsonResponse([
         'ok' => true,

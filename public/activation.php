@@ -20,7 +20,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     #camera_video {
-        transform: scaleX(-1);
+      transform: scaleX(-1);
     }
   </style>
 </head>
@@ -605,6 +605,61 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         submit_button.disabled = !ok;
       }
 
+      function getFrontPhotoBox() {
+        const base_photo_box = (compositor_config && compositor_config.photo_box) ? compositor_config.photo_box : {};
+        const front_side_layout = (compositor_config && compositor_config.side_layouts && compositor_config.side_layouts.front) ?
+          compositor_config.side_layouts.front : {};
+        const front_photo_box_override = front_side_layout.photo_box || {};
+
+        return {
+          ...base_photo_box,
+          ...front_photo_box_override
+        };
+      }
+
+      function getFrontTextFieldConfig(field_name) {
+        const base_text_fields = (compositor_config && compositor_config.text_fields) ? compositor_config.text_fields : {};
+        const base_field_config = base_text_fields[field_name] || {};
+
+        const front_side_layout = (compositor_config && compositor_config.side_layouts && compositor_config.side_layouts.front) ?
+          compositor_config.side_layouts.front : {};
+        const front_text_fields = front_side_layout.text_fields || {};
+        const front_field_override = front_text_fields[field_name] || {};
+
+        return {
+          ...base_field_config,
+          ...front_field_override,
+          box: {
+            ...(base_field_config.box || {}),
+            ...(front_field_override.box || {})
+          }
+        };
+      }
+
+      function resolveConfiguredPrintMode() {
+        const explicit_print_mode = String(
+          (compositor_config && (
+            compositor_config.print_mode ||
+            compositor_config.card_print_mode ||
+            compositor_config.job_print_mode
+          )) || ""
+        ).trim();
+
+        if (explicit_print_mode === "front_and_back" || explicit_print_mode === "front_back" || explicit_print_mode === "dual_side") {
+          return "front_and_back";
+        }
+
+        if (explicit_print_mode === "front_only" || explicit_print_mode === "single_side") {
+          return "front_only";
+        }
+
+        const has_back_side_layout = !!(compositor_config &&
+          compositor_config.side_layouts &&
+          compositor_config.side_layouts.back);
+
+        return has_back_side_layout ? "front_and_back" : "front_only";
+      }
+
       async function submitJob() {
         form_error.textContent = "";
         setScreen("status");
@@ -643,15 +698,33 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             throw new Error(compose_data.error || "Falha ao montar imagem.");
           }
 
-          const composed_image_key = String(compose_data.composed_image_key || "");
-          if (!composed_image_key) {
-            throw new Error("Resposta inválida do compositor (sem composed_image_key).");
+          const configured_print_mode = resolveConfiguredPrintMode();
+
+          const front_composed_image_key = String(
+            compose_data.front_image_key ||
+            compose_data.composed_image_key ||
+            ""
+          );
+
+          const back_composed_image_key = String(
+            compose_data.back_image_key ||
+            ""
+          );
+
+          if (!front_composed_image_key) {
+            throw new Error("Resposta inválida do compositor (sem front_image_key).");
           }
+
+          const effective_print_mode =
+            configured_print_mode === "front_and_back" && back_composed_image_key !== "" ?
+            "front_and_back" :
+            "front_only";
 
           const job_body = {
             csrf_token,
-            print_mode: "front_only",
-            front_composed_image_key: composed_image_key,
+            print_mode: effective_print_mode,
+            front_composed_image_key,
+            back_composed_image_key,
             front_image_data_url: "",
             back_image_data_url: ""
           };
@@ -683,21 +756,28 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         const response = await fetch(api_get_compositor_config_url, {
           cache: "no-store"
         });
+
         const data = await response.json();
         if (!data.ok) {
           throw new Error(data.error || "Falha ao carregar config do compositor.");
         }
+
         compositor_config = data.compositor_config;
 
-        const photo_box = compositor_config.photo_box;
-        const aspect_ratio = Number(photo_box.width) / Number(photo_box.height);
+        const front_photo_box = getFrontPhotoBox();
+        const aspect_ratio = Number(front_photo_box.width) / Number(front_photo_box.height);
+
         if (Number.isFinite(aspect_ratio) && aspect_ratio > 0) {
           setPreviewAspectRatio(aspect_ratio);
         }
 
-        const name_max = Number(compositor_config.text_fields?.person_name?.max_chars || 40);
-        const artist_max = Number(compositor_config.text_fields?.artist_name?.max_chars || 40);
-        const track_max = Number(compositor_config.text_fields?.track_name?.max_chars || 40);
+        const person_name_config = getFrontTextFieldConfig("person_name");
+        const artist_name_config = getFrontTextFieldConfig("artist_name");
+        const track_name_config = getFrontTextFieldConfig("track_name");
+
+        const name_max = Number(person_name_config.max_chars || 40);
+        const artist_max = Number(artist_name_config.max_chars || 40);
+        const track_max = Number(track_name_config.max_chars || 40);
 
         person_name_input.maxLength = name_max;
         manual_artist_input.maxLength = artist_max;
@@ -998,7 +1078,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         spotifyRenderSelected();
         updateSubmitEnabled();
 
-        spotifyFetchTracksByArtistName(artist.name);
+        spotifyFetchTopTracks(artist.name);
       }
 
       function spotifySelectTrack(track) {

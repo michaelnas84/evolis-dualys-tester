@@ -84,7 +84,7 @@ if (is_array($compositor_config)) {
         }
 
         try {
-          const response = await fetch('unlock.php', {
+          const response = await fetch('admin/unlock.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password })
@@ -113,7 +113,7 @@ if (is_array($compositor_config)) {
         <div class="mt-2 text-sm text-slate-400">Arraste as caixas. Use o canto inferior direito pra redimensionar.</div>
 
         <div class="mt-4 rounded-2xl overflow-hidden bg-black border border-slate-800 relative" id="stage" style="max-width: 520px;">
-          <img id="frame_image" src="../frames/frame-01.png" alt="Frame" class="w-full h-auto block" />
+          <img id="frame_image" src="../frames/frame_01_front.png" alt="Frame" class="w-full h-auto block" />
 
           <div id="box_photo" class="absolute border-2 border-emerald-400/80 bg-emerald-400/10">
             <div class="absolute -top-6 left-0 text-xs bg-black/70 px-2 py-1 rounded">Foto</div>
@@ -403,7 +403,7 @@ if (is_array($compositor_config)) {
         }
 
         try {
-          const response = await fetch('save_config.php', {
+          const response = await fetch('admin/save_config.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ compositor_config: parsed })
