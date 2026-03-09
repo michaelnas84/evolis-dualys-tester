@@ -683,7 +683,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           </div>
           <p id="prog_label" style="color:rgba(255,255,255,.45);font-size:13px;margin-top:8px;"></p>
         </div>
-        <div id="wait_msg" style="color:rgba(255,255,255,.55);font-size:14px;margin-top:14px;"></div>
+        <div id="wait_msg" style="color:rgba(255,255,255,.55);font-size:14px;margin-top:14px;display:none;"></div>
       </div>
     </div>
   </div>
@@ -813,7 +813,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             setTimeout(() => {
               fade_ovl.classList.remove("fading");
               setTimeout(res, 450);
-            }, 400);
+            }, 250);
           }, 400);
         });
       }
@@ -940,16 +940,16 @@ $csrf_token = (string)$_SESSION['csrf_token'];
          TELA FORMULÁRIO – teclado QWERTY
       ════════════════════════════════════════════════════ */
       const VKB_ALPHA = [
-        ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-        ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-        ["SHIFT", "z", "x", "c", "v", "b", "n", "m", "⌫"],
+        ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+        ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+        ["Z", "X", "C", "V", "B", "N", "M", "⌫"],
         ["123", "SPACE", "@", ".", "OK"],
       ];
       const VKB_NUM = [
         ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
         ["-", "/", ":", ";", "(", ")", "$", "&", "@", '"'],
         ["ABC", ".", ",", "?", "!", "'", "⌫"],
-        ["ABC", "SPACE", ".", ",", "OK"],
+        ["ABC", "SPACE", "OK"],
       ];
 
       function buildVkb() {
@@ -964,10 +964,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             b.className = "vk";
             if (k === "SPACE") {
               b.className += " xwide";
-              b.textContent = "espaço";
-            } else if (k === "SHIFT") {
-              b.className += " wide accent";
-              b.textContent = vkb_shift ? "⬆" : "⇧";
+              b.textContent = "ESPAÇO";
             } else if (k === "ABC" || k === "123") {
               b.className += " wide accent";
               b.textContent = k;
@@ -978,7 +975,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
               b.className += " wide del";
               b.textContent = "⌫";
             } else {
-              b.textContent = (vkb_shift && vkb_mode === "alpha") ? k.toUpperCase() : k;
+              b.textContent = k;
             }
             b.addEventListener("mousedown", e => e.preventDefault());
             b.addEventListener("touchstart", e => e.preventDefault(), {
@@ -993,11 +990,6 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
       function vkbKey(k) {
         if (!active_inp) return;
-        if (k === "SHIFT") {
-          vkb_shift = !vkb_shift;
-          buildVkb();
-          return;
-        }
         if (k === "123") {
           vkb_mode = "num_sym";
           buildVkb();
@@ -1017,15 +1009,10 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           active_inp.dispatchEvent(new Event("input"));
           return;
         }
-        const ch = k === "SPACE" ? " " :
-          (vkb_shift && vkb_mode === "alpha") ? k.toUpperCase() : k;
+        const ch = k === "SPACE" ? " " : k;
         if (active_inp.value.length < (active_inp.maxLength || 40)) {
           active_inp.value += ch;
           active_inp.dispatchEvent(new Event("input"));
-        }
-        if (vkb_shift && k !== "SHIFT") {
-          vkb_shift = false;
-          buildVkb();
         }
       }
 
