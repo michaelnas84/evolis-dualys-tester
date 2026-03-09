@@ -45,11 +45,13 @@ $artist_name = (string)($payload['artist_name'] ?? '');
 $track_name = (string)($payload['track_name'] ?? '');
 $photo_data_url = (string)($payload['photo_data_url'] ?? '');
 $frame_name = (string)($payload['frame_name']) . '.png';
-$frame_name = __DIR__ . '/../frames/' . $frame_name;
+$frame_patch = __DIR__ . '/../frames/' . $frame_name;
 
 $frame_pair_info = [
-    'front_file_path' => $frame_name,
-    'back_file_path' => str_replace('front', 'back', $frame_name),
+    'front_file_path' => $frame_patch,
+    'front_file_name' => $frame_name . '.png',
+    'back_file_path' => str_replace('front', 'back', $frame_patch),
+    'back_file_name' => str_replace('front', 'back', $frame_name) . '.png',
 ];
 
 if ($photo_data_url === '') {
