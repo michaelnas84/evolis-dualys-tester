@@ -86,7 +86,6 @@ try {
 
     $front_image_data_url = (string)($result['front_image_data_url'] ?? $result['final_image_data_url'] ?? '');
     $back_image_data_url = (string)($result['back_image_data_url'] ?? '');
-    $frame_pair_key = (string)($result['frame_pair_key'] ?? '');
     $front_frame_file_name = (string)($result['front_frame_file_name'] ?? $result['frame_file_name'] ?? '');
     $back_frame_file_name = (string)($result['back_frame_file_name'] ?? '');
 
@@ -99,7 +98,6 @@ try {
             'ok' => true,
             'front_image_data_url' => $front_image_data_url,
             'back_image_data_url' => $back_image_data_url,
-            'frame_pair_key' => $frame_pair_key,
             'front_frame_file_name' => $front_frame_file_name,
             'back_frame_file_name' => $back_frame_file_name,
 
@@ -140,7 +138,6 @@ try {
         'print_job_key' => $print_job_key,
         'front_image_key' => $front_output_file_name,
         'back_image_key' => $back_output_file_name,
-        'frame_pair_key' => $frame_pair_key,
         'front_frame_file_name' => $front_frame_file_name,
         'back_frame_file_name' => $back_frame_file_name,
 
