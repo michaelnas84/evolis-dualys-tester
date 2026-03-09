@@ -13,7 +13,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Card Kiosk – Exagerados</title>
+  <title>Card Kiosk - Exagerados</title>
   <script src="js/tailwind.js"></script>
   <style>
     *,
@@ -258,10 +258,10 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     /* ── Numpad ── */
     .numpad {
       position: absolute;
-      bottom: 0;
+      bottom: 20vh;
       left: 0;
       right: 0;
-      background: rgba(18, 6, 38, .94);
+      background: rgba(18, 6, 38, .3);
       backdrop-filter: blur(10px);
       padding: 14px 24px 26px;
       border-top: 1px solid rgba(255, 255, 255, .1);
@@ -358,7 +358,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       position: fixed;
       left: 0;
       right: 0;
-      background: rgba(18, 6, 38, .96);
+      background: rgba(18, 6, 38, .3);
       backdrop-filter: blur(14px);
       padding: 8px 5px 16px;
       border-top: 1px solid rgba(255, 255, 255, .1);
@@ -366,7 +366,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       pointer-events: none;
       transition: opacity .25s ease;
       z-index: 800;
-      bottom: 0;
+      bottom: 20vh;
     }
 
     .vkb.open {
@@ -508,7 +508,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
      TELA 2 – CPF
 ═══════════════════════════════ -->
   <div id="s_cpf" class="screen">
-    <img src="assets/tela-05.png" class="bg-img" alt="" />
+    <img src="assets/tela-02.png" class="bg-img" alt="" />
     <div class="screen-body" style="justify-content:center;padding:0 32px;gap:0;">
 
       <div style="text-align:center;margin-bottom:36px;">
@@ -551,8 +551,8 @@ $csrf_token = (string)$_SESSION['csrf_token'];
      TELA 3 – SELEÇÃO DE FRAME
 ═══════════════════════════════ -->
   <div id="s_frame" class="screen">
-    <img src="assets/tela-04.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding:0;">
+    <img src="assets/tela-02.png" class="bg-img" alt="" />
+    <div class="screen-body" style="justify-content:center;padding:0;gap:2rem;">
 
       <div style="text-align:center;padding:28px 24px 16px;">
         <p style="font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.55);text-transform:uppercase;margin-bottom:5px;">VIVA OS FÃS</p>
@@ -560,7 +560,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       </div>
 
       <!-- Frame cards -->
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;
+      <div style="display:flex;align-items:center;justify-content:center;
       width:100%;padding:0 18px;gap:14px;" id="frame_grid">
         <div class="frame-card" data-frame="frame_01_front" style="width:calc(33.3% - 10px);aspect-ratio:2/3;">
           <img src="frames/frame_01_front.png" alt="Frame 1" />
@@ -584,7 +584,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 ═══════════════════════════════ -->
   <div id="s_form" class="screen">
     <img src="assets/tela-04.png" class="bg-img" alt="" />
-    <div class="screen-body" style="padding:0;overflow:hidden;">
+    <div class="screen-body" style="justify-content:center;padding:0;gap:2rem;">
 
       <div style="text-align:center;padding:28px 24px 14px;flex-shrink:0;">
         <p style="font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.55);text-transform:uppercase;margin-bottom:5px;">VIVA OS FÃS</p>
@@ -631,7 +631,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 ═══════════════════════════════ -->
   <div id="s_capture" class="screen">
     <img src="assets/tela-02.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;">
+    <div class="screen-body" style="justify-content:center;padding:0;gap:2rem;">
 
       <div style="text-align:center;padding:26px 24px 0;position:relative;z-index:10;flex-shrink:0;">
         <p style="font-size:30px;font-weight:900;letter-spacing:7px;color:#fff;
@@ -657,8 +657,8 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           <button id="cap_shoot_btn" class="btn-p">TIRAR FOTO</button>
           <button id="cap_retake_btn" class="btn-s" style="display:none;">REFAZER</button>
           <button id="cap_proceed_btn" class="btn-p" style="display:none;">CONTINUAR</button>
-          <button id="cap_switch_btn" class="btn-s" style="font-size:14px;padding:10px 18px;">↻ Câmera</button>
-          <button id="cap_cancel_btn" class="btn-s" style="font-size:14px;padding:10px 18px;">Cancelar</button>
+          <button id="cap_switch_btn" class="btn-s" style="font-size:14px;padding:10px 18px;display:none;">↻ Câmera</button>
+          <button id="cap_cancel_btn" class="btn-s" style="font-size:14px;padding:10px 18px;display:none;">Cancelar</button>
         </div>
         <div id="cap_err" class="err" style="margin-top:10px;"></div>
       </div>
@@ -669,8 +669,8 @@ $csrf_token = (string)$_SESSION['csrf_token'];
      TELA 6 – AGUARDANDO
 ═══════════════════════════════ -->
   <div id="s_waiting" class="screen">
-    <img src="assets/tela-03.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding-top:175px;">
+    <img src="assets/tela-04.png" class="bg-img" alt="" />
+    <div class="screen-body" style="justify-content:center;padding:0;gap:2rem;padding-top:175px;">
       <div style="text-align:center;z-index:10;position:relative;padding:0 24px;">
         <p style="font-size:33px;font-weight:900;letter-spacing:4px;color:#fff;
         text-transform:uppercase;text-shadow:0 2px 18px rgba(0,0,0,.5);">AGUARDE</p>
@@ -692,14 +692,14 @@ $csrf_token = (string)$_SESSION['csrf_token'];
      TELA 7 – PRONTO
 ═══════════════════════════════ -->
   <div id="s_done" class="screen">
-    <img src="assets/tela-06.png" class="bg-img" alt="" />
+    <img src="assets/tela-07.png" class="bg-img" alt="" />
     <div id="done_tap" style="position:absolute;inset:0;z-index:20;cursor:pointer;"></div>
     <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
     text-align:center;z-index:15;pointer-events:none;">
       <p style="font-size:32px;font-weight:900;letter-spacing:3px;color:#fff;
-      text-shadow:0 2px 18px rgba(0,0,0,.6);text-transform:uppercase;">CARTÃO PRONTO</p>
+      text-transform:uppercase;">CARTÃO PRONTO</p>
       <p style="font-size:32px;font-weight:900;letter-spacing:3px;color:#fff;
-      text-shadow:0 2px 18px rgba(0,0,0,.6);text-transform:uppercase;">OBRIGADO!</p>
+      text-transform:uppercase;">OBRIGADO!</p>
     </div>
   </div>
 
@@ -713,6 +713,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       /* ── Config ───────────────────────────────────────── */
       const CSRF = <?= json_encode($csrf_token, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
       const API_JOB = "api/create_job.php";
+      const API_RECORD = "api/record_participant.php";
       const API_HEALTH = "api/health.php";
       const API_CFG = "api/get_compositor_config.php";
       const API_COMPOSE = "api/compose_image.php";
@@ -809,8 +810,10 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             Object.values(screens).forEach(s => s.classList.remove("active"));
             screens[name].classList.add("active");
             cur_screen = name;
-            fade_ovl.classList.remove("fading");
-            setTimeout(res, 450);
+            setTimeout(() => {
+              fade_ovl.classList.remove("fading");
+              setTimeout(res, 450);
+            }, 400);
           }, 400);
         });
       }
@@ -1033,7 +1036,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         active_inp = inp;
         inp.classList.add("focused");
         // Push the form content up so the focused input stays visible above keyboard
-        vkb_spacer.style.height = VKB_H + "px";
+        // vkb_spacer.style.height = VKB_H + "px";
         // Hide button while typing
         form_barea.style.opacity = "0";
         form_barea.style.pointerEvents = "none";
@@ -1327,6 +1330,31 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           });
           const jd = await jr.json();
           if (!jd.ok) throw new Error(jd.error || "Falha ao criar job.");
+
+          wait_msg.textContent = "Salvando participante...";
+
+          // ── Grava o participante completo no banco ─────────────────────────
+          // Fire-and-forget: não bloqueia a jornada se falhar
+          fetch(API_RECORD, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              csrf_token: CSRF,
+              cpf: cpf_digits,
+              person_name: f_name.value.trim(),
+              fandom: f_fandom.value.trim(),
+              track: f_track.value.trim(),
+              frame_name: selected_frame,
+              job_id: jd.job_id,
+              job_folder_path: jd.job_folder_path || "",
+              print_mode: bk ? "front_and_back" : "front_only",
+              front_image_key: fk,
+              back_image_key: bk,
+              // photo_data_url: photo_url, // descomente para salvar a foto
+            })
+          }).catch(() => {});
           wait_msg.textContent = "Job criado: " + jd.job_id;
         } catch (e) {
           wait_msg.textContent = "Erro: " + String(e.message || e);

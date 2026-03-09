@@ -44,6 +44,13 @@ $person_name = (string)($payload['person_name'] ?? '');
 $artist_name = (string)($payload['artist_name'] ?? '');
 $track_name = (string)($payload['track_name'] ?? '');
 $photo_data_url = (string)($payload['photo_data_url'] ?? '');
+$frame_name = (string)($payload['frame_name'] ?? '');
+$frame_name = __DIR__ . '/../public/frames/' . $frame_name;
+
+$frame_pair_info = [
+    'front_file_path' => $frame_name,
+    'back_file_path' => str_replace($frame_name, 'front', 'back'),
+];
 
 if ($photo_data_url === '') {
     jsonResponse(['ok' => false, 'error' => 'Missing photo_data_url.'], 400);
@@ -73,7 +80,8 @@ try {
         $person_name,
         $artist_name,
         $track_name,
-        $preview_only
+        $preview_only,
+        $frame_pair_info
     );
 
     $front_image_data_url = (string)($result['front_image_data_url'] ?? $result['final_image_data_url'] ?? '');

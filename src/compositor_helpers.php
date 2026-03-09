@@ -596,10 +596,9 @@ function composeFinalImageDataUrls(
     string $person_name,
     string $artist_name,
     string $track_name,
-    bool $preview_only
+    bool $preview_only,
+    array $frame_pair_info
 ): array {
-    $frame_pair_info = chooseNextFramePair($compositor_config, $preview_only);
-
     $front_frame_file_path = (string)$frame_pair_info['front_file_path'];
     $back_frame_file_path = (string)$frame_pair_info['back_file_path'];
 
@@ -640,22 +639,4 @@ function composeFinalImageDataUrls(
         'final_image_data_url' => $front_image_data_url,
         'frame_file_name' => (string)$frame_pair_info['front_file_name'],
     ];
-}
-
-function composeFinalImageDataUrl(
-    array $compositor_config,
-    string $photo_data_url,
-    string $person_name,
-    string $artist_name,
-    string $track_name,
-    bool $preview_only
-): array {
-    return composeFinalImageDataUrls(
-        $compositor_config,
-        $photo_data_url,
-        $person_name,
-        $artist_name,
-        $track_name,
-        $preview_only
-    );
 }
