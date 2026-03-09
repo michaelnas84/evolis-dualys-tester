@@ -638,7 +638,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         text-transform:uppercase;text-shadow:0 2px 14px rgba(0,0,0,.5);">SORRIA!</p>
       </div>
 
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;
+      <div style="display:flex;align-items:center;justify-content:center;
       width:100%;padding:10px 24px;position:relative;z-index:10;">
         <div id="cap_box" style="position:relative;width:100%;max-width:390px;
         border-radius:24px;overflow:hidden;background:#111;aspect-ratio:3/4;">
@@ -972,7 +972,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
               b.className += " wide accent";
               b.textContent = "OK ✓";
             } else if (k === "⌫") {
-              b.className += " wide del";
+              b.className += " del";
               b.textContent = "⌫";
             } else {
               b.textContent = k;
