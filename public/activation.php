@@ -1,13 +1,10 @@
 <?php
 
 declare(strict_types=1);
-
 session_start();
-
 if (!isset($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
 }
-
 $csrf_token = (string)$_SESSION['csrf_token'];
 ?>
 <!doctype html>
@@ -16,1157 +13,1463 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Card Kiosk</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Card Kiosk – Exagerados</title>
+  <script src="js/tailwind.js"></script>
   <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1a0030;
+      touch-action: manipulation;
+    }
+
+    /* ── Screens ── */
+    .screen {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      overflow: hidden;
+    }
+
+    .screen.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .bg-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      user-select: none;
+      pointer-events: none;
+      display: block;
+    }
+
+    .screen-body {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Camera mirror */
     #camera_video {
       transform: scaleX(-1);
+    }
+
+    /* ── Global fade overlay ── */
+    #fade_overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+      z-index: 9999;
+    }
+
+    #fade_overlay.fading {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* ── Loading spinner overlay ── */
+    #loading_overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.72);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+
+    #loading_overlay.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .spinner {
+      width: 58px;
+      height: 58px;
+      border: 4px solid rgba(255, 255, 255, 0.18);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── Bouncing dots ── */
+    .dots span {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #fff;
+      margin: 0 5px;
+      animation: dot-bounce 1.2s ease-in-out infinite;
+    }
+
+    .dots span:nth-child(2) {
+      animation-delay: .2s;
+    }
+
+    .dots span:nth-child(3) {
+      animation-delay: .4s;
+    }
+
+    @keyframes dot-bounce {
+
+      0%,
+      60%,
+      100% {
+        transform: translateY(0);
+        opacity: .5;
+      }
+
+      30% {
+        transform: translateY(-14px);
+        opacity: 1;
+      }
+    }
+
+    /* ── Buttons ── */
+    .btn-p {
+      background: linear-gradient(135deg, #ff80c0, #c060ff);
+      color: #fff;
+      font-size: 20px;
+      font-weight: 700;
+      padding: 16px 52px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: opacity .2s, transform .12s;
+      box-shadow: 0 4px 24px rgba(180, 80, 255, .45);
+      white-space: nowrap;
+    }
+
+    .btn-p:disabled {
+      opacity: .32;
+      cursor: default;
+    }
+
+    .btn-p:not(:disabled):active {
+      transform: scale(.95);
+    }
+
+    .btn-s {
+      background: rgba(255, 255, 255, .12);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 12px 28px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .25);
+      cursor: pointer;
+      transition: background .2s;
+    }
+
+    .btn-s:active {
+      background: rgba(255, 255, 255, .24);
+    }
+
+    /* ── Field label ── */
+    .flabel {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      color: rgba(255, 255, 255, .65);
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+
+    /* ── Kiosk input ── */
+    .ki {
+      width: 100%;
+      background: rgba(255, 192, 218, .32);
+      border: 1.5px solid transparent;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 19px;
+      padding: 14px 22px;
+      outline: none;
+      caret-color: transparent;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+
+    .ki.focused {
+      border-color: rgba(255, 180, 230, .8);
+      background: rgba(255, 192, 218, .46);
+    }
+
+    /* ── CPF display ── */
+    .cpf-box {
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: 5px;
+      color: #fff;
+      text-align: center;
+      background: rgba(255, 192, 218, .22);
+      border: 2px solid rgba(255, 255, 255, .28);
+      border-radius: 18px;
+      padding: 18px 36px;
+      min-width: 310px;
+      cursor: pointer;
+      transition: border-color .2s;
+      user-select: none;
+    }
+
+    .cpf-box.focused {
+      border-color: rgba(255, 200, 240, .85);
+    }
+
+    /* ── Numpad ── */
+    .numpad {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(18, 6, 38, .94);
+      backdrop-filter: blur(10px);
+      padding: 14px 24px 26px;
+      border-top: 1px solid rgba(255, 255, 255, .1);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease;
+      z-index: 500;
+    }
+
+    .numpad.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .np-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    .np-key {
+      background: rgba(255, 255, 255, .14);
+      border: 1px solid rgba(255, 255, 255, .16);
+      border-bottom: 3px solid rgba(0, 0, 0, .45);
+      border-radius: 14px;
+      color: #fff;
+      font-size: 30px;
+      font-weight: 600;
+      height: 72px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      transition: background .1s, transform .1s;
+    }
+
+    .np-key:active {
+      background: rgba(255, 255, 255, .3);
+      transform: scale(.92);
+    }
+
+    .np-key.del {
+      font-size: 22px;
+      background: rgba(200, 50, 50, .32);
+    }
+
+    .np-key.empty {
+      background: transparent;
+      border: none;
+      cursor: default;
+    }
+
+    /* ── Frame selection ── */
+    .frame-card {
+      position: relative;
+      opacity: .42;
+      border: 3px solid transparent;
+      border-radius: 20px;
+      overflow: hidden;
+      cursor: pointer;
+      transform: scale(.92);
+      transition:
+        opacity .38s ease,
+        border-color .38s ease,
+        transform .38s ease,
+        box-shadow .38s ease;
+      background: #000;
+      flex-shrink: 0;
+    }
+
+    .frame-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .frame-card.selected {
+      opacity: 1;
+      border-color: #ff80c0;
+      transform: scale(1.06);
+      box-shadow:
+        0 0 0 4px rgba(255, 128, 192, .45),
+        0 10px 36px rgba(180, 80, 255, .6);
+    }
+
+    /* ── QWERTY keyboard ── */
+    .vkb {
+      position: fixed;
+      left: 0;
+      right: 0;
+      background: rgba(18, 6, 38, .96);
+      backdrop-filter: blur(14px);
+      padding: 8px 5px 16px;
+      border-top: 1px solid rgba(255, 255, 255, .1);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease;
+      z-index: 800;
+      bottom: 0;
+    }
+
+    .vkb.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .vkb-row {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      margin: 3px 0;
+    }
+
+    .vk {
+      background: rgba(255, 255, 255, .14);
+      border: 1px solid rgba(255, 255, 255, .15);
+      border-bottom: 3px solid rgba(0, 0, 0, .45);
+      border-radius: 9px;
+      color: #fff;
+      font-size: 21px;
+      font-weight: 500;
+      height: 56px;
+      min-width: 32px;
+      padding: 0 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      transition: background .1s, transform .08s;
+      flex: 1;
+      max-width: 58px;
+    }
+
+    .vk:active {
+      background: rgba(255, 255, 255, .3);
+      transform: scale(.91);
+    }
+
+    .vk.wide {
+      max-width: none;
+      flex: 2;
+    }
+
+    .vk.xwide {
+      max-width: none;
+      flex: 5;
+      font-size: 14px;
+    }
+
+    .vk.accent {
+      background: rgba(180, 80, 255, .38);
+    }
+
+    .vk.del {
+      font-size: 22px;
+    }
+
+    /* ── Capture countdown ── */
+    #cap_cdown_wrap {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .34);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+
+    #cap_cdown_wrap.on {
+      opacity: 1;
+    }
+
+    .cdown-circle {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, .52);
+      backdrop-filter: blur(4px);
+      border: 4px solid rgba(255, 255, 255, .6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 74px;
+      font-weight: 900;
+      color: #fff;
+    }
+
+    /* ── Progress bar ── */
+    .prog-wrap {
+      width: 100%;
+      max-width: 440px;
+      height: 6px;
+      background: rgba(255, 255, 255, .14);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff80c0, #c060ff);
+      border-radius: 999px;
+      transition: width 1s linear;
+    }
+
+    /* ── Error ── */
+    .err {
+      color: #ff8080;
+      font-size: 14px;
+      text-align: center;
+      min-height: 20px;
     }
   </style>
 </head>
 
-<body class="h-screen bg-slate-950 text-slate-100 select-none overflow-hidden">
+<body>
 
-  <div class="h-full w-full">
-
-    <!-- IDLE -->
-    <div id="screen_idle" class="h-full w-full relative">
-      <div class="absolute inset-0 flex items-center justify-center">
-        <div class="text-center px-6">
-          <div class="text-4xl sm:text-5xl font-semibold">Toque para começar</div>
-          <div class="mt-4 text-slate-300">Foto + nome + música</div>
-          <button id="idle_start_button" class="mt-10 px-6 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold">
-            Iniciar
-          </button>
-          <div id="idle_health" class="mt-6 text-sm text-slate-400"></div>
-          <div class="mt-3 text-xs text-slate-500">Atalho admin: Ctrl + Alt + P</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CAPTURE -->
-    <div id="screen_capture" class="hidden h-full w-full">
-      <div class="h-full w-full flex flex-col">
-        <div class="px-6 pt-6 flex items-center justify-between gap-4">
-          <div>
-            <div class="text-3xl font-semibold">Tire sua foto</div>
-            <div class="mt-1 text-slate-300">Centralize o rosto</div>
-          </div>
-          <div class="text-right">
-            <div class="text-sm text-slate-400">Inatividade</div>
-            <div id="idle_countdown" class="text-xl font-semibold">--</div>
-          </div>
-        </div>
-
-        <div class="flex-1 px-6 py-6 flex items-center justify-center">
-          <div id="preview_container" class="relative w-full max-w-md rounded-2xl overflow-hidden bg-black border border-slate-800" style="aspect-ratio: 1 / 1;">
-            <video id="camera_video" class="absolute inset-0 h-full w-full object-cover" autoplay playsinline muted></video>
-            <img id="captured_image" class="absolute inset-0 h-full w-full object-cover hidden" alt="Foto" />
-
-            <div id="countdown_overlay" class="hidden absolute inset-0 flex items-center justify-center">
-              <div class="text-7xl font-extrabold bg-black/40 px-8 py-4 rounded-2xl">3</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="px-6 pb-8">
-          <div class="flex flex-wrap gap-3 justify-center">
-            <button id="capture_button" class="px-8 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold">
-              Tirar foto
-            </button>
-            <button id="retake_button" class="hidden px-8 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-xl font-semibold">
-              Refazer
-            </button>
-            <button id="proceed_button" class="hidden px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xl font-semibold">
-              Prosseguir
-            </button>
-            <button id="switch_camera_button" class="px-6 py-4 rounded-2xl bg-slate-900 border border-slate-700">
-              Trocar câmera
-            </button>
-            <button id="capture_cancel_button" class="px-6 py-4 rounded-2xl bg-slate-900 border border-slate-700">
-              Cancelar
-            </button>
-          </div>
-          <div id="capture_error" class="mt-4 text-center text-sm text-rose-300"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- FORM -->
-    <div id="screen_form" class="hidden h-full w-full">
-      <div class="h-full w-full flex flex-col">
-        <div class="px-6 pt-6 flex items-start justify-between gap-4">
-          <div>
-            <div class="text-3xl font-semibold">Preencha</div>
-            <div class="mt-1 text-slate-300">Nome + artista + música</div>
-          </div>
-          <div class="text-right">
-            <div class="text-sm text-slate-400">Modo</div>
-            <div id="entry_mode_label" class="text-xl font-semibold">Manual</div>
-            <div id="admin_unlocked_label" class="mt-1 text-xs text-slate-500 hidden">Admin destravado</div>
-          </div>
-        </div>
-
-        <div class="flex-1 overflow-auto px-6 py-6">
-          <div class="w-full max-w-4xl mx-auto">
-            <div class="grid grid-cols-1 gap-4">
-              <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4">
-                <label class="text-sm text-slate-300">Nome</label>
-                <input id="person_name_input" class="mt-2 w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Digite seu nome" maxlength="40" />
-                <div id="person_name_counter" class="mt-2 text-xs text-slate-400"></div>
-              </div>
-
-              <div id="panel_manual" class="rounded-2xl bg-slate-900 border border-slate-800 p-4">
-                <div class="flex items-center justify-between">
-                  <div class="text-lg font-semibold">Manual</div>
-                  <div class="text-xs text-slate-500">Ctrl + Alt + P para alternar (admin)</div>
-                </div>
-                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="text-sm text-slate-300">Artista</label>
-                    <input id="manual_artist_input" class="mt-2 w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Ex.: Imagine Dragons" maxlength="40" />
-                    <div id="artist_counter" class="mt-2 text-xs text-slate-400"></div>
-                  </div>
-                  <div>
-                    <label class="text-sm text-slate-300">Música</label>
-                    <input id="manual_track_input" class="mt-2 w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Ex.: Believer" maxlength="40" />
-                    <div id="track_counter" class="mt-2 text-xs text-slate-400"></div>
-                  </div>
-                </div>
-              </div>
-
-              <div id="panel_spotify" class="hidden rounded-2xl bg-slate-900 border border-slate-800 p-4">
-                <div class="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
-                    <div class="text-lg font-semibold">Spotify</div>
-                    <div class="text-xs text-slate-400">Teste via App Token (client_credentials). Sem login de usuário.</div>
-                  </div>
-                  <div class="flex gap-2 items-center">
-                    <button id="spotify_login_button" class="px-4 py-2 rounded-xl bg-white text-slate-900 font-semibold" disabled>Entrar</button>
-                    <button id="spotify_logout_button" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700" disabled>Sair</button>
-                    <span id="spotify_auth_status" class="px-3 py-1 rounded-full border border-slate-700 text-xs text-slate-300">—</span>
-                  </div>
-                </div>
-
-                <div class="mt-4">
-                  <div class="flex gap-2 flex-wrap">
-                    <input id="spotify_artist_query" class="flex-1 min-w-[240px] px-4 py-3 rounded-xl bg-slate-950 border border-slate-700" placeholder="Buscar artista" />
-                    <button id="spotify_artist_search_button" class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700" disabled>Buscar</button>
-                  </div>
-                  <div id="spotify_artist_results" class="mt-4 grid gap-2"></div>
-                </div>
-
-                <div class="mt-6">
-                  <div id="spotify_selected_artist_label" class="text-sm text-slate-300">Nenhum artista selecionado.</div>
-                  <div id="spotify_track_results" class="mt-4 grid gap-2"></div>
-                </div>
-
-                <div class="mt-6 rounded-xl bg-slate-950 border border-slate-800 p-4">
-                  <div class="text-sm text-slate-300">Selecionado</div>
-                  <div id="spotify_selected_values" class="mt-2 text-sm text-slate-400">Nada selecionado ainda.</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-6 flex flex-wrap justify-center gap-3">
-              <button id="form_back_button" class="px-6 py-4 rounded-2xl bg-slate-900 border border-slate-700 text-xl font-semibold">
-                Voltar
-              </button>
-              <button id="submit_button" class="px-8 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold" disabled>
-                Enviar para impressão
-              </button>
-            </div>
-            <div id="form_error" class="mt-4 text-center text-sm text-rose-300"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- STATUS -->
-    <div id="screen_status" class="hidden h-full w-full flex items-center justify-center">
-      <div class="text-center px-6">
-        <div id="status_title" class="text-3xl font-semibold">Processando...</div>
-        <div id="status_message" class="mt-3 text-slate-300"></div>
-        <button id="status_done_button" class="mt-10 px-6 py-4 rounded-2xl bg-white text-slate-900 text-xl font-semibold hidden">
-          Voltar ao início
-        </button>
-      </div>
-    </div>
-
+  <!-- Global overlays -->
+  <div id="fade_overlay"></div>
+  <div id="loading_overlay">
+    <div class="spinner"></div>
+    <p style="color:#fff;margin-top:16px;font-size:16px;letter-spacing:1px;">Processando foto...</p>
   </div>
 
+  <!-- ═══════════════════════════════
+     TELA 1 – IDLE
+═══════════════════════════════ -->
+  <div id="s_idle" class="screen active">
+    <img src="assets/tela-01.png" class="bg-img" alt="" />
+    <div id="idle_tap" style="position:absolute;inset:0;z-index:20;cursor:pointer;"></div>
+    <div id="idle_health" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+    font-size:12px;color:rgba(255,255,255,.3);z-index:30;pointer-events:none;"></div>
+  </div>
+
+  <!-- ═══════════════════════════════
+     TELA 2 – CPF
+═══════════════════════════════ -->
+  <div id="s_cpf" class="screen">
+    <img src="assets/tela-05.png" class="bg-img" alt="" />
+    <div class="screen-body" style="justify-content:center;padding:0 32px;gap:0;">
+
+      <div style="text-align:center;margin-bottom:36px;">
+        <p style="font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.55);text-transform:uppercase;margin-bottom:6px;">VIVA OS FÃS</p>
+        <p style="font-size:24px;font-weight:800;letter-spacing:2px;color:#fff;text-transform:uppercase;">DIGITE SEU CPF</p>
+      </div>
+
+      <div id="cpf_box" class="cpf-box">
+        <span id="cpf_txt" style="opacity:.38;">000.000.000-00</span>
+      </div>
+
+      <div id="cpf_err" class="err" style="margin-top:14px;"></div>
+
+      <div id="cpf_btn_area" style="margin-top:20px;display:flex;justify-content:center;
+      transition:opacity .25s;min-height:58px;align-items:center;">
+        <button id="cpf_btn" class="btn-p" disabled>CONTINUAR</button>
+      </div>
+    </div>
+
+    <!-- Numpad -->
+    <div id="numpad" class="numpad">
+      <div class="np-grid">
+        <div class="np-key" data-d="1">1</div>
+        <div class="np-key" data-d="2">2</div>
+        <div class="np-key" data-d="3">3</div>
+        <div class="np-key" data-d="4">4</div>
+        <div class="np-key" data-d="5">5</div>
+        <div class="np-key" data-d="6">6</div>
+        <div class="np-key" data-d="7">7</div>
+        <div class="np-key" data-d="8">8</div>
+        <div class="np-key" data-d="9">9</div>
+        <div class="np-key empty"></div>
+        <div class="np-key" data-d="0">0</div>
+        <div class="np-key del" id="np_del">⌫</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+     TELA 3 – SELEÇÃO DE FRAME
+═══════════════════════════════ -->
+  <div id="s_frame" class="screen">
+    <img src="assets/tela-04.png" class="bg-img" alt="" />
+    <div class="screen-body" style="justify-content:flex-start;padding:0;">
+
+      <div style="text-align:center;padding:28px 24px 16px;">
+        <p style="font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.55);text-transform:uppercase;margin-bottom:5px;">VIVA OS FÃS</p>
+        <p style="font-size:22px;font-weight:800;letter-spacing:1.5px;color:#fff;text-transform:uppercase;">ESCOLHA SEU FRAME</p>
+      </div>
+
+      <!-- Frame cards -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;
+      width:100%;padding:0 18px;gap:14px;" id="frame_grid">
+        <div class="frame-card" data-frame="frame_01_front" style="width:calc(33.3% - 10px);aspect-ratio:2/3;">
+          <img src="frames/frame_01_front.png" alt="Frame 1" />
+        </div>
+        <div class="frame-card" data-frame="frame_02_front" style="width:calc(33.3% - 10px);aspect-ratio:2/3;">
+          <img src="frames/frame_02_front.png" alt="Frame 2" />
+        </div>
+        <div class="frame-card" data-frame="frame_03_front" style="width:calc(33.3% - 10px);aspect-ratio:2/3;">
+          <img src="frames/frame_03_front.png" alt="Frame 3" />
+        </div>
+      </div>
+
+      <div style="padding:20px 24px 36px;width:100%;display:flex;justify-content:center;">
+        <button id="frame_btn" class="btn-p" disabled>CONTINUAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+     TELA 4 – FORMULÁRIO
+═══════════════════════════════ -->
+  <div id="s_form" class="screen">
+    <img src="assets/tela-04.png" class="bg-img" alt="" />
+    <div class="screen-body" style="padding:0;overflow:hidden;">
+
+      <div style="text-align:center;padding:28px 24px 14px;flex-shrink:0;">
+        <p style="font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.55);text-transform:uppercase;margin-bottom:5px;">VIVA OS FÃS</p>
+        <p style="font-size:20px;font-weight:800;letter-spacing:1px;color:#fff;text-transform:uppercase;">PREENCHA OS DADOS</p>
+        <p style="font-size:20px;font-weight:800;letter-spacing:1px;color:#fff;text-transform:uppercase;">PARA PARTICIPAR</p>
+      </div>
+
+      <!-- Fields -->
+      <div style="width:100%;max-width:500px;padding:0 24px;flex-shrink:0;">
+        <div style="margin-bottom:13px;">
+          <div class="flabel">NOME</div>
+          <input id="f_name" class="ki" readonly autocomplete="off" maxlength="40" />
+        </div>
+        <div style="margin-bottom:13px;">
+          <div class="flabel">FANDOM</div>
+          <input id="f_fandom" class="ki" readonly autocomplete="off" maxlength="40" />
+        </div>
+        <div style="margin-bottom:13px;">
+          <div class="flabel">VIVO OUVINDO</div>
+          <input id="f_track" class="ki" readonly autocomplete="off" maxlength="40" />
+        </div>
+        <div id="form_err" class="err" style="margin-top:6px;"></div>
+      </div>
+
+      <!-- Button -->
+      <div id="form_btn_area" style="padding:14px 24px 0;width:100%;
+      display:flex;justify-content:center;transition:opacity .25s;
+      min-height:60px;align-items:center;flex-shrink:0;">
+        <button id="form_btn" class="btn-p" disabled>CONTINUAR</button>
+      </div>
+
+      <!-- Spacer so layout shifts up when VKB opens -->
+      <div id="vkb_spacer" style="flex-shrink:0;height:0;transition:height .25s ease;"></div>
+    </div>
+
+    <!-- QWERTY keyboard (fixed to bottom of viewport) -->
+    <div id="vkb" class="vkb">
+      <div id="vkb_rows"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+     TELA 5 – CAPTURA
+═══════════════════════════════ -->
+  <div id="s_capture" class="screen">
+    <img src="assets/tela-02.png" class="bg-img" alt="" />
+    <div class="screen-body" style="justify-content:flex-start;">
+
+      <div style="text-align:center;padding:26px 24px 0;position:relative;z-index:10;flex-shrink:0;">
+        <p style="font-size:30px;font-weight:900;letter-spacing:7px;color:#fff;
+        text-transform:uppercase;text-shadow:0 2px 14px rgba(0,0,0,.5);">SORRIA!</p>
+      </div>
+
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;
+      width:100%;padding:10px 24px;position:relative;z-index:10;">
+        <div id="cap_box" style="position:relative;width:100%;max-width:390px;
+        border-radius:24px;overflow:hidden;background:#111;aspect-ratio:3/4;">
+          <video id="camera_video" style="position:absolute;inset:0;width:100%;height:100%;
+          object-fit:cover;" autoplay playsinline muted></video>
+          <img id="cap_img" style="position:absolute;inset:0;width:100%;height:100%;
+          object-fit:cover;display:none;" alt="" />
+          <div id="cap_cdown_wrap">
+            <div class="cdown-circle" id="cap_cdown_num">3</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:0 24px 28px;z-index:10;position:relative;width:100%;flex-shrink:0;">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">
+          <button id="cap_shoot_btn" class="btn-p">TIRAR FOTO</button>
+          <button id="cap_retake_btn" class="btn-s" style="display:none;">REFAZER</button>
+          <button id="cap_proceed_btn" class="btn-p" style="display:none;">CONTINUAR</button>
+          <button id="cap_switch_btn" class="btn-s" style="font-size:14px;padding:10px 18px;">↻ Câmera</button>
+          <button id="cap_cancel_btn" class="btn-s" style="font-size:14px;padding:10px 18px;">Cancelar</button>
+        </div>
+        <div id="cap_err" class="err" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+     TELA 6 – AGUARDANDO
+═══════════════════════════════ -->
+  <div id="s_waiting" class="screen">
+    <img src="assets/tela-03.png" class="bg-img" alt="" />
+    <div class="screen-body" style="justify-content:flex-start;padding-top:175px;">
+      <div style="text-align:center;z-index:10;position:relative;padding:0 24px;">
+        <p style="font-size:33px;font-weight:900;letter-spacing:4px;color:#fff;
+        text-transform:uppercase;text-shadow:0 2px 18px rgba(0,0,0,.5);">AGUARDE</p>
+        <p style="font-size:33px;font-weight:900;letter-spacing:4px;color:#fff;
+        text-transform:uppercase;text-shadow:0 2px 18px rgba(0,0,0,.5);">IMPRIMINDO CARTÃO</p>
+        <div class="dots" style="margin-top:30px;"><span></span><span></span><span></span></div>
+        <div style="margin-top:30px;">
+          <div class="prog-wrap">
+            <div class="prog-fill" id="prog_fill" style="width:0%"></div>
+          </div>
+          <p id="prog_label" style="color:rgba(255,255,255,.45);font-size:13px;margin-top:8px;"></p>
+        </div>
+        <div id="wait_msg" style="color:rgba(255,255,255,.55);font-size:14px;margin-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+     TELA 7 – PRONTO
+═══════════════════════════════ -->
+  <div id="s_done" class="screen">
+    <img src="assets/tela-06.png" class="bg-img" alt="" />
+    <div id="done_tap" style="position:absolute;inset:0;z-index:20;cursor:pointer;"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    text-align:center;z-index:15;pointer-events:none;">
+      <p style="font-size:32px;font-weight:900;letter-spacing:3px;color:#fff;
+      text-shadow:0 2px 18px rgba(0,0,0,.6);text-transform:uppercase;">CARTÃO PRONTO</p>
+      <p style="font-size:32px;font-weight:900;letter-spacing:3px;color:#fff;
+      text-shadow:0 2px 18px rgba(0,0,0,.6);text-transform:uppercase;">OBRIGADO!</p>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════ -->
   <script>
     (() => {
-      const csrf_token = <?= json_encode($csrf_token, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+      'use strict';
 
-      const api_create_job_url = "api/create_job.php";
-      const api_health_url = "api/health.php";
-      const api_get_compositor_config_url = "api/get_compositor_config.php";
-      const api_compose_image_url = "api/compose_image.php";
+      /* ── Config ───────────────────────────────────────── */
+      const CSRF = <?= json_encode($csrf_token, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+      const API_JOB = "api/create_job.php";
+      const API_HEALTH = "api/health.php";
+      const API_CFG = "api/get_compositor_config.php";
+      const API_COMPOSE = "api/compose_image.php";
+      const API_CPF = "api/validate_cpf.php";
+      const API_BG = "http://localhost:5001/remove-bg";
+      const WAIT_SECS = 48; // ← tempo de espera em segundos (editável)
 
-      const idle_timeout_seconds = 60;
-      let idle_seconds_left = idle_timeout_seconds;
-      let idle_interval_id = null;
+      /* ── DOM helpers ──────────────────────────────────── */
+      const $ = id => document.getElementById(id);
 
-      let compositor_config = null;
-      let preview_aspect_ratio = 1;
+      const screens = {
+        idle: $("s_idle"),
+        cpf: $("s_cpf"),
+        frame: $("s_frame"),
+        form: $("s_form"),
+        capture: $("s_capture"),
+        waiting: $("s_waiting"),
+        done: $("s_done"),
+      };
 
-      let current_stream = null;
-      let current_device_id = null;
-      let available_video_devices = [];
-      let camera_ready = false;
+      const fade_ovl = $("fade_overlay");
+      const load_ovl = $("loading_overlay");
 
-      let captured_photo_data_url = null;
-      let entry_mode = "manual"; // manual | spotify
-      let admin_unlocked = false;
-      let countdown_interval_id = null;
+      /* idle */
+      const idle_tap = $("idle_tap");
+      const idle_health = $("idle_health");
 
-      // Spotify (App Token)
-      const spotify_api_base = "https://api.spotify.com/v1";
-      const spotify_app_token_api_url = "./api/spotify_app_token.php";
-      let spotify_app_access_token = null;
-      let spotify_app_expires_at_ms = 0;
+      /* cpf */
+      const cpf_box = $("cpf_box");
+      const cpf_txt = $("cpf_txt");
+      const cpf_btn = $("cpf_btn");
+      const cpf_err = $("cpf_err");
+      const numpad = $("numpad");
+      const np_del = $("np_del");
+      const cpf_barea = $("cpf_btn_area");
 
-      let spotify_selected_artist = null;
-      let spotify_selected_track = null;
+      /* frame */
+      const frame_cards = Array.from(document.querySelectorAll(".frame-card"));
+      const frame_btn = $("frame_btn");
 
-      const screen_idle = document.getElementById("screen_idle");
-      const screen_capture = document.getElementById("screen_capture");
-      const screen_form = document.getElementById("screen_form");
-      const screen_status = document.getElementById("screen_status");
+      /* form */
+      const f_name = $("f_name");
+      const f_fandom = $("f_fandom");
+      const f_track = $("f_track");
+      const form_btn = $("form_btn");
+      const form_err = $("form_err");
+      const vkb = $("vkb");
+      const form_barea = $("form_btn_area");
+      const vkb_spacer = $("vkb_spacer");
 
-      const idle_start_button = document.getElementById("idle_start_button");
-      const idle_health = document.getElementById("idle_health");
+      /* capture */
+      const cam_video = $("camera_video");
+      const cap_img = $("cap_img");
+      const cap_box = $("cap_box");
+      const cap_cdown = $("cap_cdown_wrap");
+      const cap_cnum = $("cap_cdown_num");
+      const cap_shoot = $("cap_shoot_btn");
+      const cap_retake = $("cap_retake_btn");
+      const cap_proceed = $("cap_proceed_btn");
+      const cap_switch = $("cap_switch_btn");
+      const cap_cancel = $("cap_cancel_btn");
+      const cap_err = $("cap_err");
 
-      const camera_video = document.getElementById("camera_video");
-      const preview_container = document.getElementById("preview_container");
-      const captured_image = document.getElementById("captured_image");
-      const capture_button = document.getElementById("capture_button");
-      const retake_button = document.getElementById("retake_button");
-      const proceed_button = document.getElementById("proceed_button");
-      const switch_camera_button = document.getElementById("switch_camera_button");
-      const capture_cancel_button = document.getElementById("capture_cancel_button");
-      const countdown_overlay = document.getElementById("countdown_overlay");
-      const idle_countdown = document.getElementById("idle_countdown");
-      const capture_error = document.getElementById("capture_error");
+      /* waiting */
+      const prog_fill = $("prog_fill");
+      const prog_label = $("prog_label");
+      const wait_msg = $("wait_msg");
 
-      const entry_mode_label = document.getElementById("entry_mode_label");
-      const admin_unlocked_label = document.getElementById("admin_unlocked_label");
+      /* done */
+      const done_tap = $("done_tap");
 
-      const person_name_input = document.getElementById("person_name_input");
-      const person_name_counter = document.getElementById("person_name_counter");
-      const panel_manual = document.getElementById("panel_manual");
-      const panel_spotify = document.getElementById("panel_spotify");
-      const manual_artist_input = document.getElementById("manual_artist_input");
-      const manual_track_input = document.getElementById("manual_track_input");
-      const artist_counter = document.getElementById("artist_counter");
-      const track_counter = document.getElementById("track_counter");
-      const form_back_button = document.getElementById("form_back_button");
-      const submit_button = document.getElementById("submit_button");
-      const form_error = document.getElementById("form_error");
+      /* ── State ────────────────────────────────────────── */
+      let cur_screen = "idle";
+      let cpf_digits = "";
+      let selected_frame = null; // e.g. "frame_01_front"
+      let active_inp = null;
+      let vkb_shift = false;
+      let vkb_mode = "alpha"; // alpha | num_sym
+      let cam_stream = null;
+      let cam_devid = null;
+      let cam_devs = [];
+      let cam_ready = false;
+      let photo_url = null;
+      let cdown_tid = null;
+      let wait_tid = null;
+      let comp_cfg = null;
+      let prev_ar = 3 / 4;
 
-      const spotify_login_button = document.getElementById("spotify_login_button");
-      const spotify_logout_button = document.getElementById("spotify_logout_button");
-      const spotify_auth_status = document.getElementById("spotify_auth_status");
-      const spotify_artist_query = document.getElementById("spotify_artist_query");
-      const spotify_artist_search_button = document.getElementById("spotify_artist_search_button");
-      const spotify_artist_results = document.getElementById("spotify_artist_results");
-      const spotify_selected_artist_label = document.getElementById("spotify_selected_artist_label");
-      const spotify_track_results = document.getElementById("spotify_track_results");
-      const spotify_selected_values = document.getElementById("spotify_selected_values");
-
-      const status_title = document.getElementById("status_title");
-      const status_message = document.getElementById("status_message");
-      const status_done_button = document.getElementById("status_done_button");
-
-      function setScreen(screen_name) {
-        const screens = [screen_idle, screen_capture, screen_form, screen_status];
-        for (const screen of screens) {
-          screen.classList.add("hidden");
-        }
-        if (screen_name === "idle") screen_idle.classList.remove("hidden");
-        if (screen_name === "capture") screen_capture.classList.remove("hidden");
-        if (screen_name === "form") screen_form.classList.remove("hidden");
-        if (screen_name === "status") screen_status.classList.remove("hidden");
+      /* ── Screen transition ────────────────────────────── */
+      function showScreen(name) {
+        return new Promise(res => {
+          fade_ovl.classList.add("fading");
+          setTimeout(() => {
+            Object.values(screens).forEach(s => s.classList.remove("active"));
+            screens[name].classList.add("active");
+            cur_screen = name;
+            fade_ovl.classList.remove("fading");
+            setTimeout(res, 450);
+          }, 400);
+        });
       }
 
-      function resetState() {
-        capture_error.textContent = "";
-        form_error.textContent = "";
+      /* ── Loading ──────────────────────────────────────── */
+      const showLoad = () => load_ovl.classList.add("visible");
+      const hideLoad = () => load_ovl.classList.remove("visible");
 
-        captured_photo_data_url = null;
-        captured_image.src = "";
-        captured_image.classList.add("hidden");
-        camera_video.classList.remove("hidden");
-
-        capture_button.disabled = false;
-        capture_button.classList.remove("opacity-60");
-        retake_button.classList.add("hidden");
-        proceed_button.classList.add("hidden");
-
-        person_name_input.value = "";
-        manual_artist_input.value = "";
-        manual_track_input.value = "";
-
-        spotify_selected_artist = null;
-        spotify_selected_track = null;
-        spotify_artist_results.innerHTML = "";
-        spotify_track_results.innerHTML = "";
-        spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
-        spotify_selected_values.textContent = "Nada selecionado ainda.";
-
-        updateSubmitEnabled();
-      }
-
-      function resetIdleTimer() {
-        idle_seconds_left = idle_timeout_seconds;
-        idle_countdown.textContent = String(idle_seconds_left) + "s";
-      }
-
-      function startIdleTimer() {
-        stopIdleTimer();
-        resetIdleTimer();
-        idle_interval_id = window.setInterval(() => {
-          idle_seconds_left -= 1;
-          if (idle_seconds_left < 0) idle_seconds_left = 0;
-          idle_countdown.textContent = String(idle_seconds_left) + "s";
-
-          if (idle_seconds_left === 0) {
-            goIdle();
-          }
-        }, 1000);
-      }
-
-      function stopIdleTimer() {
-        if (idle_interval_id !== null) {
-          window.clearInterval(idle_interval_id);
-          idle_interval_id = null;
-        }
-      }
-
-      function goIdle() {
-        stopIdleTimer();
-        stopCamera();
-        resetState();
-        setScreen("idle");
-      }
-
+      /* ── Health check ─────────────────────────────────── */
       async function fetchHealth() {
         try {
-          const response = await fetch(api_health_url, {
+          const r = await fetch(API_HEALTH, {
             cache: "no-store"
           });
-          const data = await response.json();
-          if (data.ok) {
-            idle_health.textContent = "Hotfolder OK";
-          } else {
-            idle_health.textContent = "Hotfolder erro: " + (data.error || "desconhecido");
-          }
+          const d = await r.json();
+          idle_health.textContent = d.ok ? "Hotfolder OK" : "Erro: " + (d.error || "?");
         } catch {
-          idle_health.textContent = "Falha ao checar hotfolder";
+          idle_health.textContent = "";
         }
       }
 
-      function setPreviewAspectRatio(aspect_ratio) {
-        preview_aspect_ratio = aspect_ratio;
-        preview_container.style.aspectRatio = String(aspect_ratio);
+      /* ════════════════════════════════════════════════════
+         TELA CPF
+      ════════════════════════════════════════════════════ */
+      function fmtCpf(d) {
+        const s = d.padEnd(11, " ");
+        return `${s.slice(0,3)}.${s.slice(3,6)}.${s.slice(6,9)}-${s.slice(9,11)}`.trimEnd();
       }
 
-      async function enumerateVideoDevices() {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        available_video_devices = devices.filter(device => device.kind === "videoinput");
-      }
-
-      async function startCamera(device_id = null) {
-        capture_error.textContent = "";
-        camera_ready = false;
-
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("getUserMedia não disponível neste navegador.");
-        }
-
-        stopCamera();
-
-        const constraints = {
-          video: device_id ? {
-            deviceId: {
-              exact: device_id
-            },
-            width: {
-              ideal: 1920
-            },
-            height: {
-              ideal: 1080
-            }
-          } : {
-            width: {
-              ideal: 1920
-            },
-            height: {
-              ideal: 1080
-            }
-          },
-          audio: false
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        current_stream = stream;
-        camera_video.srcObject = stream;
-
-        await new Promise(resolve => {
-          camera_video.onloadedmetadata = () => resolve();
-        });
-
-        camera_ready = true;
-      }
-
-      function stopCamera() {
-        if (current_stream) {
-          for (const track of current_stream.getTracks()) {
-            track.stop();
-          }
-          current_stream = null;
-        }
-        camera_video.srcObject = null;
-        camera_ready = false;
-      }
-
-      function captureCurrentFrameAsJpegDataUrl() {
-        const video_width = camera_video.videoWidth || 0;
-        const video_height = camera_video.videoHeight || 0;
-        if (video_width === 0 || video_height === 0) {
-          throw new Error("Câmera ainda não está pronta.");
-        }
-
-        const target_width = 900;
-        const target_height = Math.round(target_width / preview_aspect_ratio);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = target_width;
-        canvas.height = target_height;
-
-        const ctx = canvas.getContext("2d");
-
-        const video_aspect_ratio = video_width / video_height;
-        let source_x = 0;
-        let source_y = 0;
-        let source_w = video_width;
-        let source_h = video_height;
-
-        if (video_aspect_ratio > preview_aspect_ratio) {
-          source_w = Math.round(video_height * preview_aspect_ratio);
-          source_x = Math.round((video_width - source_w) / 2);
+      function renderCpf() {
+        if (cpf_digits.length === 0) {
+          cpf_txt.textContent = "000.000.000-00";
+          cpf_txt.style.opacity = ".38";
         } else {
-          source_h = Math.round(video_width / preview_aspect_ratio);
-          source_y = Math.round((video_height - source_h) / 2);
+          cpf_txt.textContent = fmtCpf(cpf_digits);
+          cpf_txt.style.opacity = "1";
         }
-
-        ctx.drawImage(camera_video, source_x, source_y, source_w, source_h, 0, 0, target_width, target_height);
-        return canvas.toDataURL("image/jpeg", 0.92);
+        cpf_btn.disabled = cpf_digits.length < 11;
       }
 
-      async function processPhotoRemoveBg(photoDataUrl) {
+      function openNumpad() {
+        numpad.classList.add("open");
+        cpf_box.classList.add("focused");
+        cpf_barea.style.opacity = "0";
+        cpf_barea.style.pointerEvents = "none";
+      }
 
+      function closeNumpad() {
+        numpad.classList.remove("open");
+        cpf_box.classList.remove("focused");
+        cpf_barea.style.opacity = "1";
+        cpf_barea.style.pointerEvents = "all";
+      }
+
+      cpf_box.addEventListener("click", () =>
+        numpad.classList.contains("open") ? closeNumpad() : openNumpad()
+      );
+
+      document.addEventListener("click", e => {
+        if (cur_screen !== "cpf") return;
+        if (!numpad.contains(e.target) && !cpf_box.contains(e.target)) closeNumpad();
+      });
+
+      numpad.querySelectorAll(".np-key[data-d]").forEach(k => {
+        k.addEventListener("click", e => {
+          e.stopPropagation();
+          if (cpf_digits.length >= 11) return;
+          cpf_digits += k.dataset.d;
+          renderCpf();
+        });
+      });
+
+      np_del.addEventListener("click", e => {
+        e.stopPropagation();
+        cpf_digits = cpf_digits.slice(0, -1);
+        renderCpf();
+      });
+
+      cpf_btn.addEventListener("click", async () => {
+        cpf_err.textContent = "";
+        closeNumpad();
+        showLoad();
         try {
-
-          const response = await fetch("http://localhost:5001/remove-bg", {
+          const r = await fetch(API_CPF, {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              image: photoDataUrl,
-              apply_background: true,
-              output_format: "jpg"
+              csrf_token: CSRF,
+              cpf: cpf_digits
             })
           });
-
-          const data = await response.json();
-
-          if (!data.ok) {
-            throw new Error(data.error);
-          }
-
-          // usa imagem processada
-          captured_photo_data_url = data.image;
-
-          captured_image.src = data.image;
-          captured_image.classList.remove("hidden");
-          camera_video.classList.add("hidden");
-
-          retake_button.classList.remove("hidden");
-          proceed_button.classList.remove("hidden");
-
-        } catch (err) {
-
-          capture_error.textContent = "Erro ao remover fundo";
-
-          // fallback: usa imagem original
-          captured_image.src = photoDataUrl;
-          captured_image.classList.remove("hidden");
-
-        }
-
-      }
-
-      function startCaptureFlow() {
-        capture_error.textContent = "";
-
-        if (!camera_ready) {
-          capture_error.textContent = "Câmera não disponível.";
-          return;
-        }
-
-        capture_button.disabled = true;
-        capture_button.classList.add("opacity-60");
-
-        let seconds_left = 3;
-        countdown_overlay.classList.remove("hidden");
-        countdown_overlay.querySelector("div").textContent = String(seconds_left);
-
-        if (countdown_interval_id !== null) {
-          window.clearInterval(countdown_interval_id);
-          countdown_interval_id = null;
-        }
-
-        countdown_interval_id = window.setInterval(() => {
-          seconds_left -= 1;
-
-          if (seconds_left > 0) {
-            countdown_overlay.querySelector("div").textContent = String(seconds_left);
+          const d = await r.json();
+          hideLoad();
+          if (!d.ok) {
+            cpf_err.textContent = d.error || "CPF inválido ou já utilizado.";
             return;
           }
+          await showScreen("frame");
+        } catch {
+          hideLoad();
+          cpf_err.textContent = "Erro ao validar CPF.";
+        }
+      });
 
-          window.clearInterval(countdown_interval_id);
-          countdown_interval_id = null;
-          countdown_overlay.classList.add("hidden");
+      /* ════════════════════════════════════════════════════
+         TELA FRAME
+      ════════════════════════════════════════════════════ */
+      frame_cards.forEach(card => {
+        card.addEventListener("click", () => {
+          frame_cards.forEach(c => c.classList.remove("selected"));
+          card.classList.add("selected");
+          selected_frame = card.dataset.frame;
+          frame_btn.disabled = false;
+        });
+      });
 
+      frame_btn.addEventListener("click", async () => {
+        await showScreen("form");
+      });
+
+      /* ════════════════════════════════════════════════════
+         TELA FORMULÁRIO – teclado QWERTY
+      ════════════════════════════════════════════════════ */
+      const VKB_ALPHA = [
+        ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+        ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
+        ["SHIFT", "z", "x", "c", "v", "b", "n", "m", "⌫"],
+        ["123", "SPACE", "@", ".", "OK"],
+      ];
+      const VKB_NUM = [
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+        ["-", "/", ":", ";", "(", ")", "$", "&", "@", '"'],
+        ["ABC", ".", ",", "?", "!", "'", "⌫"],
+        ["ABC", "SPACE", ".", ",", "OK"],
+      ];
+
+      function buildVkb() {
+        const rows = vkb_mode === "alpha" ? VKB_ALPHA : VKB_NUM;
+        const c = $("vkb_rows");
+        c.innerHTML = "";
+        rows.forEach(row => {
+          const rd = document.createElement("div");
+          rd.className = "vkb-row";
+          row.forEach(k => {
+            const b = document.createElement("button");
+            b.className = "vk";
+            if (k === "SPACE") {
+              b.className += " xwide";
+              b.textContent = "espaço";
+            } else if (k === "SHIFT") {
+              b.className += " wide accent";
+              b.textContent = vkb_shift ? "⬆" : "⇧";
+            } else if (k === "ABC" || k === "123") {
+              b.className += " wide accent";
+              b.textContent = k;
+            } else if (k === "OK") {
+              b.className += " wide accent";
+              b.textContent = "OK ✓";
+            } else if (k === "⌫") {
+              b.className += " wide del";
+              b.textContent = "⌫";
+            } else {
+              b.textContent = (vkb_shift && vkb_mode === "alpha") ? k.toUpperCase() : k;
+            }
+            b.addEventListener("mousedown", e => e.preventDefault());
+            b.addEventListener("touchstart", e => e.preventDefault(), {
+              passive: false
+            });
+            b.addEventListener("click", () => vkbKey(k));
+            rd.appendChild(b);
+          });
+          c.appendChild(rd);
+        });
+      }
+
+      function vkbKey(k) {
+        if (!active_inp) return;
+        if (k === "SHIFT") {
+          vkb_shift = !vkb_shift;
+          buildVkb();
+          return;
+        }
+        if (k === "123") {
+          vkb_mode = "num_sym";
+          buildVkb();
+          return;
+        }
+        if (k === "ABC") {
+          vkb_mode = "alpha";
+          buildVkb();
+          return;
+        }
+        if (k === "OK") {
+          closeVkb();
+          return;
+        }
+        if (k === "⌫") {
+          active_inp.value = active_inp.value.slice(0, -1);
+          active_inp.dispatchEvent(new Event("input"));
+          return;
+        }
+        const ch = k === "SPACE" ? " " :
+          (vkb_shift && vkb_mode === "alpha") ? k.toUpperCase() : k;
+        if (active_inp.value.length < (active_inp.maxLength || 40)) {
+          active_inp.value += ch;
+          active_inp.dispatchEvent(new Event("input"));
+        }
+        if (vkb_shift && k !== "SHIFT") {
+          vkb_shift = false;
+          buildVkb();
+        }
+      }
+
+      // VKB height constant (4 rows × 62px + padding)
+      const VKB_H = 292;
+
+      function openVkb(inp) {
+        active_inp = inp;
+        inp.classList.add("focused");
+        // Push the form content up so the focused input stays visible above keyboard
+        vkb_spacer.style.height = VKB_H + "px";
+        // Hide button while typing
+        form_barea.style.opacity = "0";
+        form_barea.style.pointerEvents = "none";
+        vkb.classList.add("open");
+        buildVkb();
+        // Scroll focused input into view after spacer expands
+        setTimeout(() => inp.scrollIntoView({
+          block: "nearest",
+          behavior: "smooth"
+        }), 50);
+      }
+
+      function closeVkb() {
+        if (active_inp) active_inp.classList.remove("focused");
+        active_inp = null;
+        vkb.classList.remove("open");
+        vkb_spacer.style.height = "0";
+        form_barea.style.opacity = "1";
+        form_barea.style.pointerEvents = "all";
+      }
+
+      [f_name, f_fandom, f_track].forEach(inp => {
+        inp.addEventListener("click", e => {
+          e.stopPropagation();
+          openVkb(inp);
+        });
+        inp.addEventListener("input", checkFormReady);
+      });
+
+      document.addEventListener("click", e => {
+        if (cur_screen !== "form") return;
+        const inVkb = vkb.contains(e.target);
+        const inInput = [f_name, f_fandom, f_track].includes(e.target);
+        if (!inVkb && !inInput) closeVkb();
+      });
+
+      function checkFormReady() {
+        form_btn.disabled = !(
+          f_name.value.trim() && f_fandom.value.trim() && f_track.value.trim()
+        );
+      }
+
+      form_btn.addEventListener("click", async () => {
+        closeVkb();
+        await startCaptureScreen();
+      });
+
+      /* ════════════════════════════════════════════════════
+         TELA CAPTURA
+      ════════════════════════════════════════════════════ */
+      async function startCaptureScreen() {
+        cap_err.textContent = "";
+        resetCapture();
+        try {
+          await enumDevices();
+          cam_devid = cam_devs[0]?.deviceId || null;
+          await startCam(cam_devid);
+        } catch (e) {
+          cap_err.textContent = String(e.message || e);
+        }
+        await showScreen("capture");
+      }
+
+      async function enumDevices() {
+        const ds = await navigator.mediaDevices.enumerateDevices();
+        cam_devs = ds.filter(d => d.kind === "videoinput");
+      }
+
+      async function startCam(devid) {
+        stopCam();
+        cam_ready = false;
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("getUserMedia indisponível.");
+        const constraints = {
+          video: devid ?
+            {
+              deviceId: {
+                exact: devid
+              },
+              width: {
+                ideal: 1920
+              },
+              height: {
+                ideal: 1080
+              }
+            } :
+            {
+              width: {
+                ideal: 1920
+              },
+              height: {
+                ideal: 1080
+              }
+            },
+          audio: false
+        };
+        const s = await navigator.mediaDevices.getUserMedia(constraints);
+        cam_stream = s;
+        cam_video.srcObject = s;
+        await new Promise(res => {
+          cam_video.onloadedmetadata = () => res();
+        });
+        cam_ready = true;
+      }
+
+      function stopCam() {
+        cam_stream?.getTracks().forEach(t => t.stop());
+        cam_stream = null;
+        cam_video.srcObject = null;
+        cam_ready = false;
+      }
+
+      function resetCapture() {
+        photo_url = null;
+        cap_img.src = "";
+        cap_img.style.display = "none";
+        cam_video.style.display = "";
+        cap_shoot.style.display = "";
+        cap_shoot.disabled = false;
+        cap_retake.style.display = "none";
+        cap_proceed.style.display = "none";
+        cap_cdown.classList.remove("on");
+        cap_err.textContent = "";
+      }
+
+      function snapFrame() {
+        if (!cam_ready) throw new Error("Câmera não disponível.");
+        const vw = cam_video.videoWidth,
+          vh = cam_video.videoHeight;
+        if (!vw || !vh) throw new Error("Câmera não está pronta.");
+        const tw = 900,
+          th = Math.round(tw / prev_ar);
+        const cv = document.createElement("canvas");
+        cv.width = tw;
+        cv.height = th;
+        const ctx = cv.getContext("2d");
+        const va = vw / vh;
+        let sx = 0,
+          sy = 0,
+          sw = vw,
+          sh = vh;
+        if (va > prev_ar) {
+          sw = Math.round(vh * prev_ar);
+          sx = Math.round((vw - sw) / 2);
+        } else {
+          sh = Math.round(vw / prev_ar);
+          sy = Math.round((vh - sh) / 2);
+        }
+        ctx.drawImage(cam_video, sx, sy, sw, sh, 0, 0, tw, th);
+        return cv.toDataURL("image/jpeg", 0.92);
+      }
+
+      async function removeBg(dataUrl) {
+        const r = await fetch(API_BG, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            image: dataUrl,
+            apply_background: true,
+            output_format: "jpg"
+          })
+        });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || "BG removal failed");
+        return d.image;
+      }
+
+      cap_shoot.addEventListener("click", () => {
+        if (!cam_ready) {
+          cap_err.textContent = "Câmera não disponível.";
+          return;
+        }
+        cap_shoot.disabled = true;
+        let secs = 3;
+        cap_cdown.classList.add("on");
+        cap_cnum.textContent = secs;
+        if (cdown_tid) clearInterval(cdown_tid);
+        cdown_tid = setInterval(async () => {
+          secs--;
+          if (secs > 0) {
+            cap_cnum.textContent = secs;
+            return;
+          }
+          clearInterval(cdown_tid);
+          cdown_tid = null;
+          cap_cdown.classList.remove("on");
           try {
-            captured_photo_data_url = captureCurrentFrameAsJpegDataUrl();
-            processPhotoRemoveBg(captured_photo_data_url);
-            captured_image.classList.remove("hidden");
-            camera_video.classList.add("hidden");
+            const raw = snapFrame();
+            cap_img.src = raw;
+            cap_img.style.display = "";
+            cam_video.style.display = "none";
+            photo_url = raw;
+            showLoad();
+            try {
+              const proc = await removeBg(raw);
+              photo_url = proc;
+              cap_img.src = proc;
+            } catch {
+              /* fallback to raw */ }
+            hideLoad();
+            cap_shoot.style.display = "none";
+            cap_retake.style.display = "";
+            cap_proceed.style.display = "";
+          } catch (e) {
+            cap_err.textContent = String(e.message || e);
+            cap_shoot.disabled = false;
+          }
+        }, 1000);
+      });
 
-            retake_button.classList.remove("hidden");
-            proceed_button.classList.remove("hidden");
+      cap_retake.addEventListener("click", () => {
+        resetCapture();
+        cam_video.style.display = "";
+        cap_img.style.display = "none";
+      });
 
-            updateSubmitEnabled();
-          } catch (error) {
-            capture_error.textContent = String(error && error.message ? error.message : error);
-            capture_button.disabled = false;
-            capture_button.classList.remove("opacity-60");
+      cap_proceed.addEventListener("click", () => {
+        stopCam();
+        submitAndWait();
+      });
+
+      cap_switch.addEventListener("click", async () => {
+        try {
+          if (!cam_devs.length) await enumDevices();
+          if (cam_devs.length <= 1) return;
+          const idx = cam_devs.findIndex(d => d.deviceId === cam_devid);
+          cam_devid = cam_devs[(idx + 1) % cam_devs.length].deviceId;
+          await startCam(cam_devid);
+        } catch (e) {
+          cap_err.textContent = String(e.message || e);
+        }
+      });
+
+      cap_cancel.addEventListener("click", goIdle);
+
+      /* ════════════════════════════════════════════════════
+         SUBMIT + AGUARDAR
+      ════════════════════════════════════════════════════ */
+      async function submitAndWait() {
+        await showScreen("waiting");
+        startWait();
+
+        const person_name = f_name.value.trim();
+        const artist_name = f_fandom.value.trim();
+        const track_name = f_track.value.trim();
+
+        wait_msg.textContent = "Montando imagem...";
+
+        try {
+          const cr = await fetch(API_COMPOSE, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              csrf_token: CSRF,
+              preview_only: false,
+              person_name,
+              artist_name,
+              track_name,
+              photo_data_url: photo_url,
+              cpf: cpf_digits, // ← CPF
+              frame_name: selected_frame // ← frame selecionado
+            })
+          });
+          const cd = await cr.json();
+          if (!cd.ok) throw new Error(cd.error || "Falha ao montar imagem.");
+
+          const fk = String(cd.front_image_key || cd.composed_image_key || "");
+          const bk = String(cd.back_image_key || "");
+          if (!fk) throw new Error("Sem front_image_key.");
+
+          wait_msg.textContent = "Enviando para impressão...";
+
+          const jr = await fetch(API_JOB, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              csrf_token: CSRF,
+              print_mode: bk ? "front_and_back" : "front_only",
+              front_composed_image_key: fk,
+              back_composed_image_key: bk,
+              front_image_data_url: "",
+              back_image_data_url: "",
+              cpf: cpf_digits, // ← CPF
+              frame_name: selected_frame // ← frame selecionado
+            })
+          });
+          const jd = await jr.json();
+          if (!jd.ok) throw new Error(jd.error || "Falha ao criar job.");
+          wait_msg.textContent = "Job criado: " + jd.job_id;
+        } catch (e) {
+          wait_msg.textContent = "Erro: " + String(e.message || e);
+        }
+      }
+
+      function startWait() {
+        if (wait_tid) clearInterval(wait_tid);
+        let el = 0;
+        prog_fill.style.width = "0%";
+        prog_label.textContent = `0 / ${WAIT_SECS}s`;
+        wait_tid = setInterval(async () => {
+          el++;
+          const pct = Math.min(100, (el / WAIT_SECS) * 100);
+          prog_fill.style.width = pct + "%";
+          prog_label.textContent = `${el} / ${WAIT_SECS}s`;
+          if (el >= WAIT_SECS) {
+            clearInterval(wait_tid);
+            wait_tid = null;
+            await showScreen("done");
           }
         }, 1000);
       }
 
-      function updateEntryModeUi() {
-        entry_mode_label.textContent = entry_mode === "spotify" ? "Spotify" : "Manual";
-
-        if (entry_mode === "spotify") {
-          panel_manual.classList.add("hidden");
-          panel_spotify.classList.remove("hidden");
-        } else {
-          panel_spotify.classList.add("hidden");
-          panel_manual.classList.remove("hidden");
+      /* ════════════════════════════════════════════════════
+         IDLE / DONE / RESET
+      ════════════════════════════════════════════════════ */
+      async function goIdle() {
+        stopCam();
+        if (cdown_tid) {
+          clearInterval(cdown_tid);
+          cdown_tid = null;
+        }
+        if (wait_tid) {
+          clearInterval(wait_tid);
+          wait_tid = null;
         }
 
-        updateSubmitEnabled();
+        /* reset CPF */
+        cpf_digits = "";
+        renderCpf();
+        cpf_err.textContent = "";
+        closeNumpad();
+
+        /* reset frame */
+        selected_frame = null;
+        frame_cards.forEach(c => c.classList.remove("selected"));
+        frame_btn.disabled = true;
+
+        /* reset form */
+        f_name.value = "";
+        f_fandom.value = "";
+        f_track.value = "";
+        form_err.textContent = "";
+        form_btn.disabled = true;
+        closeVkb();
+
+        /* reset capture */
+        photo_url = null;
+        resetCapture();
+
+        await showScreen("idle");
       }
 
-      function setAdminUnlocked(value) {
-        admin_unlocked = value;
-        if (admin_unlocked) {
-          admin_unlocked_label.classList.remove("hidden");
-        } else {
-          admin_unlocked_label.classList.add("hidden");
-        }
-      }
+      idle_tap.addEventListener("click", async () => {
+        renderCpf();
+        await showScreen("cpf");
+      });
 
-      function updateCounter(input_element, counter_element, max_chars) {
-        const value = input_element.value || "";
-        const remaining = Math.max(0, max_chars - value.length);
-        counter_element.textContent = `${value.length}/${max_chars} (restam ${remaining})`;
-      }
+      done_tap.addEventListener("click", goIdle);
 
-      function updateSubmitEnabled() {
-        const person_name = (person_name_input.value || "").trim();
-        let artist_name = "";
-        let track_name = "";
-
-        if (entry_mode === "spotify") {
-          artist_name = spotify_selected_artist ? String(spotify_selected_artist.name || "") : "";
-          track_name = spotify_selected_track ? String(spotify_selected_track.name || "") : "";
-        } else {
-          artist_name = (manual_artist_input.value || "").trim();
-          track_name = (manual_track_input.value || "").trim();
-        }
-
-        const ok = person_name !== "" && artist_name !== "" && track_name !== "" && captured_photo_data_url;
-        submit_button.disabled = !ok;
-      }
-
-      function getFrontPhotoBox() {
-        const base_photo_box = (compositor_config && compositor_config.photo_box) ? compositor_config.photo_box : {};
-        const front_side_layout = (compositor_config && compositor_config.side_layouts && compositor_config.side_layouts.front) ?
-          compositor_config.side_layouts.front : {};
-        const front_photo_box_override = front_side_layout.photo_box || {};
-
-        return {
-          ...base_photo_box,
-          ...front_photo_box_override
-        };
-      }
-
-      function getFrontTextFieldConfig(field_name) {
-        const base_text_fields = (compositor_config && compositor_config.text_fields) ? compositor_config.text_fields : {};
-        const base_field_config = base_text_fields[field_name] || {};
-
-        const front_side_layout = (compositor_config && compositor_config.side_layouts && compositor_config.side_layouts.front) ?
-          compositor_config.side_layouts.front : {};
-        const front_text_fields = front_side_layout.text_fields || {};
-        const front_field_override = front_text_fields[field_name] || {};
-
-        return {
-          ...base_field_config,
-          ...front_field_override,
-          box: {
-            ...(base_field_config.box || {}),
-            ...(front_field_override.box || {})
-          }
-        };
-      }
-
-      function resolveConfiguredPrintMode() {
-        const explicit_print_mode = String(
-          (compositor_config && (
-            compositor_config.print_mode ||
-            compositor_config.card_print_mode ||
-            compositor_config.job_print_mode
-          )) || ""
-        ).trim();
-
-        if (explicit_print_mode === "front_and_back" || explicit_print_mode === "front_back" || explicit_print_mode === "dual_side") {
-          return "front_and_back";
-        }
-
-        if (explicit_print_mode === "front_only" || explicit_print_mode === "single_side") {
-          return "front_only";
-        }
-
-        const has_back_side_layout = !!(compositor_config &&
-          compositor_config.side_layouts &&
-          compositor_config.side_layouts.back);
-
-        return has_back_side_layout ? "front_and_back" : "front_only";
-      }
-
-      async function submitJob() {
-        form_error.textContent = "";
-        setScreen("status");
-        status_title.textContent = "Processando...";
-        status_message.textContent = "Montando imagem e criando job.";
-        status_done_button.classList.add("hidden");
-
-        const person_name = (person_name_input.value || "").trim();
-        const artist_name = entry_mode === "spotify" ?
-          (spotify_selected_artist ? String(spotify_selected_artist.name || "") : "") :
-          (manual_artist_input.value || "").trim();
-        const track_name = entry_mode === "spotify" ?
-          (spotify_selected_track ? String(spotify_selected_track.name || "") : "") :
-          (manual_track_input.value || "").trim();
-
+      /* ════════════════════════════════════════════════════
+         COMPOSITOR CONFIG
+      ════════════════════════════════════════════════════ */
+      async function loadCfg() {
         try {
-          const compose_body = {
-            csrf_token,
-            preview_only: false,
-            person_name,
-            artist_name,
-            track_name,
-            photo_data_url: captured_photo_data_url
-          };
-
-          const compose_response = await fetch(api_compose_image_url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(compose_body)
+          const r = await fetch(API_CFG, {
+            cache: "no-store"
           });
-
-          const compose_data = await compose_response.json();
-          if (!compose_data.ok) {
-            throw new Error(compose_data.error || "Falha ao montar imagem.");
+          const d = await r.json();
+          if (!d.ok) return;
+          comp_cfg = d.compositor_config;
+          const pb = comp_cfg?.side_layouts?.front?.photo_box || comp_cfg?.photo_box || {};
+          const ar = Number(pb.width) / Number(pb.height);
+          if (Number.isFinite(ar) && ar > 0) {
+            prev_ar = ar;
+            cap_box.style.aspectRatio = String(ar);
           }
-
-          const configured_print_mode = resolveConfiguredPrintMode();
-
-          const front_composed_image_key = String(
-            compose_data.front_image_key ||
-            compose_data.composed_image_key ||
-            ""
-          );
-
-          const back_composed_image_key = String(
-            compose_data.back_image_key ||
-            ""
-          );
-
-          if (!front_composed_image_key) {
-            throw new Error("Resposta inválida do compositor (sem front_image_key).");
-          }
-
-          const effective_print_mode =
-            configured_print_mode === "front_and_back" && back_composed_image_key !== "" ?
-            "front_and_back" :
-            "front_only";
-
-          const job_body = {
-            csrf_token,
-            print_mode: effective_print_mode,
-            front_composed_image_key,
-            back_composed_image_key,
-            front_image_data_url: "",
-            back_image_data_url: ""
-          };
-
-          const response = await fetch(api_create_job_url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(job_body)
+          const tf = n => ({
+            ...(comp_cfg?.text_fields?.[n] || {}),
+            ...(comp_cfg?.side_layouts?.front?.text_fields?.[n] || {})
           });
-
-          const data = await response.json();
-          if (!data.ok) {
-            throw new Error(data.error || "Falha ao criar job.");
-          }
-
-          status_title.textContent = "Pronto";
-          status_message.textContent = "Job criado: " + data.job_id;
-          status_done_button.classList.remove("hidden");
-        } catch (error) {
-          status_title.textContent = "Erro";
-          status_message.textContent = String(error && error.message ? error.message : error);
-          status_done_button.classList.remove("hidden");
-        }
+          f_name.maxLength = Number(tf("person_name").max_chars || 40);
+          f_fandom.maxLength = Number(tf("artist_name").max_chars || 40);
+          f_track.maxLength = Number(tf("track_name").max_chars || 40);
+        } catch {
+          /* ignore */ }
       }
 
-      async function loadCompositorConfig() {
-        const response = await fetch(api_get_compositor_config_url, {
-          cache: "no-store"
-        });
-
-        const data = await response.json();
-        if (!data.ok) {
-          throw new Error(data.error || "Falha ao carregar config do compositor.");
-        }
-
-        compositor_config = data.compositor_config;
-
-        const front_photo_box = getFrontPhotoBox();
-        const aspect_ratio = Number(front_photo_box.width) / Number(front_photo_box.height);
-
-        if (Number.isFinite(aspect_ratio) && aspect_ratio > 0) {
-          setPreviewAspectRatio(aspect_ratio);
-        }
-
-        const person_name_config = getFrontTextFieldConfig("person_name");
-        const artist_name_config = getFrontTextFieldConfig("artist_name");
-        const track_name_config = getFrontTextFieldConfig("track_name");
-
-        const name_max = Number(person_name_config.max_chars || 40);
-        const artist_max = Number(artist_name_config.max_chars || 40);
-        const track_max = Number(track_name_config.max_chars || 40);
-
-        person_name_input.maxLength = name_max;
-        manual_artist_input.maxLength = artist_max;
-        manual_track_input.maxLength = track_max;
-
-        updateCounter(person_name_input, person_name_counter, name_max);
-        updateCounter(manual_artist_input, artist_counter, artist_max);
-        updateCounter(manual_track_input, track_counter, track_max);
-      }
-
-      async function fetchAndStartCamera() {
-        await enumerateVideoDevices();
-        current_device_id = available_video_devices[0]?.deviceId || null;
-        await startCamera(current_device_id);
-      }
-
-      // UI events
-      idle_start_button.addEventListener("click", async () => {
-        resetState();
-        try {
-          await fetchAndStartCamera();
-          setScreen("capture");
-          startIdleTimer();
-          resetIdleTimer();
-        } catch (error) {
-          capture_error.textContent = String(error && error.message ? error.message : error);
-          setScreen("capture");
-        }
-      });
-
-      capture_cancel_button.addEventListener("click", () => goIdle());
-
-      capture_button.addEventListener("click", () => {
-        resetIdleTimer();
-        startCaptureFlow();
-      });
-
-      retake_button.addEventListener("click", () => {
-        resetIdleTimer();
-        captured_photo_data_url = null;
-        captured_image.src = "";
-        captured_image.classList.add("hidden");
-        camera_video.classList.remove("hidden");
-        capture_button.disabled = false;
-        capture_button.classList.remove("opacity-60");
-        retake_button.classList.add("hidden");
-        proceed_button.classList.add("hidden");
-        updateSubmitEnabled();
-      });
-
-      proceed_button.addEventListener("click", () => {
-        stopIdleTimer();
-        stopCamera();
-        setScreen("form");
-        updateSubmitEnabled();
-      });
-
-      switch_camera_button.addEventListener("click", async () => {
-        resetIdleTimer();
-        try {
-          if (available_video_devices.length === 0) {
-            await enumerateVideoDevices();
-          }
-          if (available_video_devices.length <= 1) {
-            return;
-          }
-
-          const current_index = available_video_devices.findIndex(device => device.deviceId === current_device_id);
-          const next_index = (current_index + 1) % available_video_devices.length;
-          current_device_id = available_video_devices[next_index].deviceId;
-
-          await startCamera(current_device_id);
-        } catch (error) {
-          capture_error.textContent = String(error && error.message ? error.message : error);
-        }
-      });
-
-      form_back_button.addEventListener("click", async () => {
-        try {
-          await fetchAndStartCamera();
-          setScreen("capture");
-          startIdleTimer();
-          resetIdleTimer();
-        } catch (error) {
-          form_error.textContent = String(error && error.message ? error.message : error);
-        }
-      });
-
-      submit_button.addEventListener("click", () => submitJob());
-      status_done_button.addEventListener("click", () => goIdle());
-
-      person_name_input.addEventListener("input", () => {
-        updateCounter(person_name_input, person_name_counter, person_name_input.maxLength);
-        updateSubmitEnabled();
-      });
-      manual_artist_input.addEventListener("input", () => {
-        updateCounter(manual_artist_input, artist_counter, manual_artist_input.maxLength);
-        updateSubmitEnabled();
-      });
-      manual_track_input.addEventListener("input", () => {
-        updateCounter(manual_track_input, track_counter, manual_track_input.maxLength);
-        updateSubmitEnabled();
-      });
-
-      // Global user interaction resets idle timer (only when capturing)
-      ["click", "touchstart", "mousemove", "keydown"].forEach(event_name => {
-        document.addEventListener(event_name, () => {
-          if (!screen_capture.classList.contains("hidden")) {
-            resetIdleTimer();
-          }
-        }, {
-          passive: true
-        });
-      });
-
-      function escapeHtml(value) {
-        return String(value)
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#039;");
-      }
-
-      async function getSpotifyAppToken() {
-        if (spotify_app_access_token && Date.now() < spotify_app_expires_at_ms - 10_000) {
-          return spotify_app_access_token;
-        }
-
-        const response = await fetch(spotify_app_token_api_url, {
-          cache: "no-store"
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(`Spotify app token error (${response.status}): ${JSON.stringify(data)}`);
-        }
-
-        spotify_app_access_token = data.access_token;
-        spotify_app_expires_at_ms = Date.now() + (Number(data.expires_in || 0) * 1000);
-        return spotify_app_access_token;
-      }
-
-      async function spotifyApiFetch(url, options = {}) {
-        const access_token = await getSpotifyAppToken();
-
-        const response = await fetch(url, {
-          ...options,
-          headers: {
-            ...(options.headers || {}),
-            Authorization: `Bearer ${access_token}`
-          }
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`Spotify API error (${response.status}): ${text}`);
-        }
-
-        return response.json();
-      }
-
-      function spotifyUpdateAuthUi() {
-        spotify_login_button.disabled = true;
-        spotify_logout_button.disabled = true;
-
-        spotify_artist_search_button.disabled = false;
-        spotify_auth_status.textContent = "App token";
-        spotify_auth_status.className = "px-3 py-1 rounded-full border border-slate-700 text-xs text-emerald-300";
-      }
-
-      function spotifyRenderSelected() {
-        if (!spotify_selected_artist && !spotify_selected_track) {
-          spotify_selected_values.textContent = "Nada selecionado ainda.";
-          return;
-        }
-
-        const artist_html = spotify_selected_artist ?
-          `<div><strong>Artista:</strong> ${escapeHtml(spotify_selected_artist.name)}</div>` :
-          `<div><strong>Artista:</strong> (não selecionado)</div>`;
-
-        const track_html = spotify_selected_track ?
-          `<div><strong>Música:</strong> ${escapeHtml(spotify_selected_track.name)}</div>` :
-          `<div><strong>Música:</strong> (não selecionada)</div>`;
-
-        spotify_selected_values.innerHTML = `${artist_html}${track_html}`;
-      }
-
-      function spotifyRenderArtistResults(artists) {
-        spotify_artist_results.innerHTML = "";
-
-        if (!artists.length) {
-          spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Nenhum artista encontrado.</div>`;
-          return;
-        }
-
-        for (const artist of artists) {
-          const image_url = artist.images?.[2]?.url || artist.images?.[1]?.url || artist.images?.[0]?.url || "";
-          const item = document.createElement("div");
-          item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
-          item.innerHTML = `
-            <img alt="" src="${escapeHtml(image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
-            <div class="flex-1">
-              <div class="font-semibold">${escapeHtml(artist.name)}</div>
-              <div class="text-xs text-slate-400">Popularidade: ${escapeHtml(artist.popularity ?? "—")}</div>
-            </div>
-            <button class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700">Escolher</button>
-          `;
-          item.querySelector("button").addEventListener("click", () => {
-            spotifySelectArtist({
-              id: artist.id,
-              name: artist.name
-            });
-          });
-          spotify_artist_results.appendChild(item);
-        }
-      }
-
-      function spotifyRenderTrackResults(tracks) {
-        spotify_track_results.innerHTML = "";
-
-        if (!tracks.length) {
-          spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Não encontrei top tracks.</div>`;
-          return;
-        }
-
-        for (const track of tracks) {
-          const album_image_url = track.album?.images?.[2]?.url || track.album?.images?.[1]?.url || track.album?.images?.[0]?.url || "";
-          const item = document.createElement("div");
-          item.className = "flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950";
-          item.innerHTML = `
-            <img alt="" src="${escapeHtml(album_image_url)}" class="w-12 h-12 rounded-lg object-cover bg-slate-900" />
-            <div class="flex-1">
-              <div class="font-semibold">${escapeHtml(track.name)}</div>
-              <div class="text-xs text-slate-400">${escapeHtml(track.album?.name || "")}</div>
-            </div>
-            <button class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold">Escolher</button>
-          `;
-          item.querySelector("button").addEventListener("click", () => {
-            spotifySelectTrack({
-              id: track.id,
-              name: track.name
-            });
-          });
-          spotify_track_results.appendChild(item);
-        }
-      }
-
-      async function spotifySearchArtist() {
-        const query = spotify_artist_query.value.trim();
-        spotify_artist_results.innerHTML = "";
-        spotify_track_results.innerHTML = "";
-        spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
-        spotify_selected_artist = null;
-        spotify_selected_track = null;
-        spotifyRenderSelected();
-        updateSubmitEnabled();
-
-        if (!query) {
-          spotify_artist_results.innerHTML = `<div class="text-sm text-slate-400">Digite um nome pra buscar.</div>`;
-          return;
-        }
-
-        try {
-          const url = new URL(`${spotify_api_base}/search`);
-          url.searchParams.set("q", query);
-          url.searchParams.set("type", "artist");
-          url.searchParams.set("limit", "10");
-          const response_json = await spotifyApiFetch(url.toString());
-          const artists = response_json?.artists?.items || [];
-          spotifyRenderArtistResults(artists);
-        } catch (error) {
-          spotify_artist_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
-        }
-      }
-
-      async function spotifyFetchTopTracks(artist_name) {
-        try {
-          const url = new URL(`${spotify_api_base}/search`);
-          url.searchParams.set("q", `artist:"${artist_name}"`);
-          url.searchParams.set("type", "track");
-          url.searchParams.set("limit", "10");
-          url.searchParams.set("market", "BR");
-
-          const response_json = await spotifyApiFetch(url.toString());
-          const tracks = response_json?.tracks?.items || [];
-          spotifyRenderTrackResults(tracks);
-        } catch (error) {
-          spotify_track_results.innerHTML = `<div class="text-sm text-rose-300">${escapeHtml(error.message)}</div>`;
-        }
-      }
-
-      function spotifySelectArtist(artist) {
-        spotify_selected_artist = artist;
-        spotify_selected_track = null;
-        spotify_selected_artist_label.innerHTML = `Artista selecionado: <strong>${escapeHtml(artist.name)}</strong>`;
-        spotify_track_results.innerHTML = `<div class="text-sm text-slate-400">Buscando músicas...</div>`;
-        spotifyRenderSelected();
-        updateSubmitEnabled();
-
-        spotifyFetchTopTracks(artist.name);
-      }
-
-      function spotifySelectTrack(track) {
-        spotify_selected_track = track;
-        spotifyRenderSelected();
-        updateSubmitEnabled();
-      }
-
-      function spotifyLogout() {
-        spotify_selected_artist = null;
-        spotify_selected_track = null;
-        spotify_artist_results.innerHTML = "";
-        spotify_track_results.innerHTML = "";
-        spotify_selected_artist_label.textContent = "Nenhum artista selecionado.";
-        spotify_selected_values.textContent = "Nada selecionado ainda.";
-        spotifyUpdateAuthUi();
-        updateSubmitEnabled();
-      }
-
-      spotify_artist_search_button.addEventListener("click", spotifySearchArtist);
-      spotify_artist_query.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !spotify_artist_search_button.disabled) spotifySearchArtist();
-      });
-
-      // Admin unlock + mode toggle
-      document.addEventListener("keydown", async (event) => {
-        const is_toggle_shortcut = event.ctrlKey && event.altKey && (event.key === "p" || event.key === "P");
-        const is_dashboard_shortcut = event.ctrlKey && event.altKey && (event.key === "d" || event.key === "D");
-        if (!is_toggle_shortcut && !is_dashboard_shortcut) return;
-
-        event.preventDefault();
-
-        if (is_dashboard_shortcut) {
-          if (!admin_unlocked) {
-            alert("Destrave o admin primeiro (Ctrl + Alt + P).");
+      /* ── Admin shortcut ──────────────────────────────── */
+      let admin_ok = false;
+      document.addEventListener("keydown", async e => {
+        const isP = e.ctrlKey && e.altKey && (e.key === "p" || e.key === "P");
+        const isD = e.ctrlKey && e.altKey && (e.key === "d" || e.key === "D");
+        if (!isP && !isD) return;
+        e.preventDefault();
+        if (isD) {
+          if (!admin_ok) {
+            alert("Destrave o admin primeiro.");
             return;
           }
           window.open("admin/index.php", "_blank");
           return;
         }
-
-        if (admin_unlocked) {
-          entry_mode = entry_mode === "manual" ? "spotify" : "manual";
-          updateEntryModeUi();
-          return;
-        }
-
-        const password = window.prompt("Senha admin:");
-        if (!password) return;
-
+        if (admin_ok) return;
+        const pw = window.prompt("Senha admin:");
+        if (!pw) return;
         try {
-          const response = await fetch("admin/unlock.php", {
+          const r = await fetch("admin/unlock.php", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              password
+              password: pw
             })
           });
-          const data = await response.json();
-          if (!data.ok) {
+          const d = await r.json();
+          if (!d.ok) {
             alert("Senha inválida");
             return;
           }
-          setAdminUnlocked(true);
-          entry_mode = entry_mode === "manual" ? "spotify" : "manual";
-          updateEntryModeUi();
+          admin_ok = true;
         } catch {
           alert("Falha ao validar senha");
         }
       });
 
-      // Init
-      setScreen("idle");
+      /* ── Init ────────────────────────────────────────── */
+      buildVkb();
       fetchHealth();
+      loadCfg();
 
-      (async () => {
-        spotifyUpdateAuthUi();
-
-        try {
-          await loadCompositorConfig();
-        } catch (error) {
-          idle_health.textContent = String(error && error.message ? error.message : error);
-        }
-
-        updateEntryModeUi();
-      })();
     })();
   </script>
 </body>

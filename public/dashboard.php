@@ -140,7 +140,7 @@ $printer_profiles = getPrinterProfiles();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Unificado da Hotfolder</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="js/tailwind.js"></script>
     <style>
         @keyframes floatIn {
             from {
