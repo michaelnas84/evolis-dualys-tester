@@ -596,15 +596,15 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       <div style="width:100%;max-width:500px;padding:0 24px;flex-shrink:0;">
         <div style="margin-bottom:13px;">
           <div class="flabel">NOME</div>
-          <input id="f_name" class="ki" readonly autocomplete="off" maxlength="40" />
+          <input id="f_name" class="ki" readonly autocomplete="off" maxlength="26" />
         </div>
         <div style="margin-bottom:13px;">
           <div class="flabel">FANDOM</div>
-          <input id="f_fandom" class="ki" readonly autocomplete="off" maxlength="40" />
+          <input id="f_fandom" class="ki" readonly autocomplete="off" maxlength="26" />
         </div>
         <div style="margin-bottom:13px;">
           <div class="flabel">VIVO OUVINDO</div>
-          <input id="f_track" class="ki" readonly autocomplete="off" maxlength="40" />
+          <input id="f_track" class="ki" readonly autocomplete="off" maxlength="26" />
         </div>
         <div id="form_err" class="err" style="margin-top:6px;"></div>
       </div>
@@ -719,7 +719,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       const API_COMPOSE = "api/compose_image.php";
       const API_CPF = "api/validate_cpf.php";
       const API_BG = "http://localhost:5001/remove-bg";
-      const WAIT_SECS = 48; // ← tempo de espera em segundos (editável)
+      const WAIT_SECS = 60; // ← tempo de espera em segundos (editável)
 
       /* ── DOM helpers ──────────────────────────────────── */
       const $ = id => document.getElementById(id);
@@ -911,6 +911,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           hideLoad();
           if (!d.ok) {
             cpf_err.textContent = d.error || "CPF inválido ou já utilizado.";
+            setTimeout(() => goIdle(), 2000);
             return;
           }
           await showScreen("frame");
