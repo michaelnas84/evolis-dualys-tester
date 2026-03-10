@@ -28,7 +28,7 @@ DEFAULT_APP_CONFIG: Dict[str, Any] = {
         "printer_name": "",
         "printer_vendor": "zebra",
         "printer_model": "zc300",
-        "printer_is_duplex": False,
+        "printer_is_duplex": True,
         "copies": 1,
         "duplex": "auto",
         "fit_mode": "fill",
@@ -59,7 +59,7 @@ DEFAULT_APP_CONFIG: Dict[str, Any] = {
     },
     "template_print": {
         "printer_name": "",
-        "printer_is_duplex": False,
+        "printer_is_duplex": True,
         "front_image_path": r"C:\card_hotfolder\backgrounds\template_front.png",
         "back_image_path": r"C:\card_hotfolder\backgrounds\template_back.png",
         "mode": "front",
