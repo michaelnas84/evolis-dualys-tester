@@ -239,12 +239,42 @@ function buildTextImage(
         '-background', 'none',
         '-fill', $fill,
         '-font', $font_file_path,
+        '-weight', '700',
         '-pointsize', (string)$fitted_font_size,
         'label:' . $text,
         '-gravity', 'center',
         '-extent', $box_width . 'x' . $box_height,
         $output_path,
     ]);
+}
+
+function resolveFontFilePath(string $font_file_path): string
+{
+    $normalized_font_file_path = trim($font_file_path);
+    if ($normalized_font_file_path === '') {
+        throw new RuntimeException('Font path is empty.');
+    }
+
+    if (!is_file($normalized_font_file_path)) {
+        throw new RuntimeException('Font not found: ' . $normalized_font_file_path);
+    }
+
+    return normalizeImagemagickPath($normalized_font_file_path);
+}
+
+function normalizeImagemagickPath(string $path): string
+{
+    $normalized_path = trim($path);
+    if ($normalized_path === '') {
+        return '';
+    }
+
+    $real_path = realpath($normalized_path);
+    if ($real_path !== false) {
+        $normalized_path = $real_path;
+    }
+
+    return str_replace('\\', '/', $normalized_path);
 }
 
 function buildProcessedPhoto(
@@ -316,10 +346,7 @@ function composeImageDataUrlUsingFrame(
     $width = (int)$size['width'];
     $height = (int)$size['height'];
 
-    $font_file_path = (string)$compositor_config['font_file_path'];
-    if (!is_file($font_file_path)) {
-        throw new RuntimeException('Font not found: ' . $font_file_path);
-    }
+    $default_font_file_path = resolveFontFilePath((string)$compositor_config['font_file_path']);
 
     $color_rgb = (array)$compositor_config['text_color_rgb'];
     $text_fields = (array)$compositor_config['text_fields'];
@@ -361,7 +388,7 @@ function composeImageDataUrlUsingFrame(
             $compositor_config,
             $person_text,
             (array)$person_config['box'],
-            $font_file_path,
+            resolveFontFilePath((string)($person_config['font_file_path'] ?? $default_font_file_path)),
             (int)($person_config['font_size'] ?? 24),
             $color_rgb,
             $person_text_path
@@ -371,7 +398,7 @@ function composeImageDataUrlUsingFrame(
             $compositor_config,
             $artist_text,
             (array)$artist_config['box'],
-            $font_file_path,
+            resolveFontFilePath((string)($person_config['font_file_path'] ?? $default_font_file_path)),
             (int)($artist_config['font_size'] ?? 18),
             $color_rgb,
             $artist_text_path
@@ -381,7 +408,7 @@ function composeImageDataUrlUsingFrame(
             $compositor_config,
             $track_text,
             (array)$track_config['box'],
-            $font_file_path,
+            resolveFontFilePath((string)($person_config['font_file_path'] ?? $default_font_file_path)),
             (int)($track_config['font_size'] ?? 18),
             $color_rgb,
             $track_text_path
