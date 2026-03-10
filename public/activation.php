@@ -16,6 +16,27 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   <title>Card Kiosk - Exagerados</title>
   <script src="js/tailwind.js"></script>
   <style>
+    @font-face {
+      font-family: 'ExageradosDisplay';
+      src:
+        url('fonts/ExageradosDisplay.woff2') format('woff2'),
+        url('fonts/ExageradosDisplay.otf') format('opentype');
+      font-display: swap;
+    }
+
+    :root {
+      --brand-bg-top: #2b0056;
+      --brand-bg-mid: #7c3aa7;
+      --brand-bg-bottom: #ffb1cf;
+      --brand-white: #ffffff;
+      --brand-soft-white: rgba(255, 255, 255, 0.82);
+      --brand-purple: #4a116f;
+      --brand-purple-strong: #34104f;
+      --brand-glow: rgba(255, 181, 226, 0.45);
+      --brand-shadow: 0 20px 60px rgba(53, 0, 84, 0.38);
+      --brand-font-ui: 'ExageradosDisplay', 'Segoe UI', system-ui, sans-serif;
+    }
+
     *,
     *::before,
     *::after {
@@ -29,9 +50,13 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       width: 100vw;
       height: 100vh;
       overflow: hidden;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #1a0030;
+      font-family: var(--brand-font-ui);
+      background: var(--brand-bg-top);
       touch-action: manipulation;
+    }
+
+    body {
+      color: var(--brand-white);
     }
 
     /* ── Screens ── */
@@ -71,6 +96,105 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       display: flex;
       flex-direction: column;
       align-items: center;
+    }
+
+    .brand-backdrop {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 10%, rgba(255, 194, 233, 0.18), transparent 22%),
+        radial-gradient(circle at 10% 78%, rgba(255, 220, 238, 0.5), transparent 18%),
+        radial-gradient(circle at 90% 82%, rgba(255, 210, 234, 0.52), transparent 18%),
+        linear-gradient(180deg, var(--brand-bg-top) 0%, var(--brand-bg-mid) 56%, var(--brand-bg-bottom) 100%);
+    }
+
+    .brand-backdrop::before,
+    .brand-backdrop::after {
+      content: "";
+      position: absolute;
+      inset: auto;
+      border-radius: 999px;
+      filter: blur(12px);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+
+    .brand-backdrop::before {
+      left: -12%;
+      bottom: -8%;
+      width: 44%;
+      height: 18%;
+      background: radial-gradient(circle at center, rgba(255, 218, 236, 0.95), rgba(255, 193, 221, 0.22) 60%, transparent 72%);
+    }
+
+    .brand-backdrop::after {
+      right: -10%;
+      bottom: -7%;
+      width: 42%;
+      height: 18%;
+      background: radial-gradient(circle at center, rgba(255, 214, 233, 0.92), rgba(255, 191, 220, 0.18) 60%, transparent 72%);
+    }
+
+    .brand-backdrop--sunset {
+      background:
+        radial-gradient(circle at 50% 20%, rgba(232, 173, 255, 0.14), transparent 26%),
+        linear-gradient(180deg, #4a1191 0%, #8f57bd 52%, #ffc3b8 100%);
+    }
+
+    .brand-backdrop--sunset .sunset-clouds {
+      position: absolute;
+      inset: auto 0 0;
+      height: 34%;
+      background:
+        radial-gradient(circle at 50% 58%, rgba(238, 113, 138, 0.88), transparent 28%),
+        radial-gradient(circle at 42% 70%, rgba(255, 226, 201, 0.9), transparent 24%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 198, 213, 0.34) 100%);
+      opacity: 0.95;
+    }
+
+    .brand-hero-copy {
+      position: relative;
+      width: 100%;
+      max-width: 760px;
+      text-align: center;
+      padding: 8vh 32px 0;
+      text-transform: uppercase;
+    }
+
+    .brand-kicker {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: clamp(18px, 2.8vw, 34px);
+      font-weight: 400;
+      letter-spacing: 1px;
+      color: var(--brand-white);
+      margin-bottom: 0.8rem;
+    }
+
+    .brand-title {
+      font-size: clamp(64px, 12vw, 180px);
+      line-height: 0.9;
+      color: var(--brand-white);
+      letter-spacing: 1px;
+    }
+
+    .brand-subtitle {
+      margin-top: 1.8rem;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: clamp(26px, 4.6vw, 54px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: 1px;
+      color: var(--brand-white);
+      text-transform: uppercase;
+    }
+
+    .brand-note {
+      margin-top: 0.8rem;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: clamp(14px, 1.8vw, 20px);
+      color: rgba(255, 255, 255, 0.78);
+      letter-spacing: 0.5px;
     }
 
     /* Camera mirror */
@@ -165,18 +289,20 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
     /* ── Buttons ── */
     .btn-p {
-      background: linear-gradient(135deg, #ff80c0, #c060ff);
-      color: #fff;
-      font-size: 20px;
+      background: rgba(255, 255, 255, 0.96);
+      color: var(--brand-purple-strong);
+      font-size: 18px;
       font-weight: 700;
-      padding: 16px 52px;
+      padding: 15px 40px;
       border-radius: 999px;
       border: none;
       cursor: pointer;
-      letter-spacing: 1px;
+      letter-spacing: 0.8px;
       transition: opacity .2s, transform .12s;
-      box-shadow: 0 4px 24px rgba(180, 80, 255, .45);
+      box-shadow: 0 10px 36px rgba(64, 12, 91, .24);
       white-space: nowrap;
+      text-transform: uppercase;
+      font-family: 'Segoe UI', system-ui, sans-serif;
     }
 
     .btn-p:disabled {
@@ -189,7 +315,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     }
 
     .btn-s {
-      background: rgba(255, 255, 255, .18);
+      background: rgba(255, 255, 255, .16);
       color: #fff;
       font-size: 16px;
       font-weight: 700;
@@ -199,6 +325,8 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       cursor: pointer;
       transition: background .2s;
       letter-spacing: .5px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      text-transform: uppercase;
     }
 
     .btn-s:active {
@@ -207,29 +335,32 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
     /* ── Field label ── */
     .flabel {
-      font-size: 13px;
+      font-size: 19px;
       font-weight: 800;
-      letter-spacing: 3px;
+      letter-spacing: 1px;
       color: rgba(255, 255, 255, .92);
       text-transform: uppercase;
-      margin-bottom: 8px;
-      padding-left: 6px;
+      margin-bottom: 10px;
+      padding-left: 18px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
     }
 
     /* ── Kiosk input ── */
     .ki {
       width: 100%;
-      background: #fff;
+      background: rgba(255, 255, 255, 0.96);
       border: 2.5px solid transparent;
       border-radius: 999px;
-      color: #3a0060;
-      font-size: 18px;
-      font-weight: 600;
-      padding: 14px 24px;
+      color: var(--brand-purple);
+      font-size: 22px;
+      font-weight: 700;
+      padding: 6px 26px;
       outline: none;
       caret-color: transparent;
       cursor: pointer;
       transition: border-color .2s, box-shadow .2s;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      box-shadow: 0 8px 24px rgba(72, 17, 108, 0.08);
     }
 
     .ki.focused {
@@ -244,19 +375,21 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
     /* ── CPF display ── */
     .cpf-box {
-      font-size: 32px;
+      font-size: 34px;
       font-weight: 700;
-      letter-spacing: 5px;
-      color: #3a0060;
+      letter-spacing: 4px;
+      color: var(--brand-purple);
       text-align: center;
-      background: #fff;
+      background: rgba(255, 255, 255, 0.96);
       border: 2.5px solid transparent;
       border-radius: 999px;
-      padding: 16px 28px;
+      padding: 6px 28px;
       width: 100%;
       cursor: pointer;
       transition: border-color .2s, box-shadow .2s;
       user-select: none;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      box-shadow: 0 8px 24px rgba(72, 17, 108, 0.08);
     }
 
     .cpf-box.focused {
@@ -267,10 +400,10 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     /* ── Numpad ── */
     .numpad {
       position: absolute;
-      bottom: 20vh;
+      bottom: 40vh;
       left: 0;
       right: 0;
-      background: rgba(10, 0, 28, .72);
+      background: rgba(67, 15, 103, .72);
       backdrop-filter: blur(16px);
       padding: 14px 24px 26px;
       border-top: 1px solid rgba(255, 255, 255, .12);
@@ -367,7 +500,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       position: fixed;
       left: 0;
       right: 0;
-      background: rgba(10, 0, 28, .72);
+      background: rgba(67, 15, 103, .72);
       backdrop-filter: blur(16px);
       padding: 8px 5px 16px;
       border-top: 1px solid rgba(255, 255, 255, .12);
@@ -375,7 +508,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       pointer-events: none;
       transition: opacity .25s ease;
       z-index: 800;
-      bottom: 20vh;
+      bottom: 27vh;
     }
 
     .vkb.open {
@@ -386,7 +519,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     .vkb-row {
       display: flex;
       justify-content: center;
-      gap: 4px;
+      gap: 12px;
       margin: 3px 0;
     }
 
@@ -396,11 +529,11 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       border-bottom: 3px solid rgba(0, 0, 0, .45);
       border-radius: 9px;
       color: #fff;
-      font-size: 21px;
+      font-size: 30px;
       font-weight: 500;
-      height: 56px;
+      height: 62px;
       min-width: 32px;
-      padding: 0 4px;
+      padding: 2.3rem;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -487,11 +620,115 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     /* ── Error ── */
     .err {
       color: #ff8080;
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 600;
       text-align: center;
       min-height: 20px;
       text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .floating-prompt {
+      position: relative;
+      z-index: 12;
+      width: min(100%, 780px);
+      margin-top: 7vh;
+      padding: 0 28px;
+      text-align: center;
+    }
+
+    .floating-prompt h2 {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: clamp(30px, 5vw, 58px);
+      line-height: 1.06;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .floating-prompt p {
+      margin-top: 12px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: clamp(14px, 2vw, 21px);
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .capture-stage,
+    .waiting-stage {
+      position: absolute;
+      inset: auto 0 0;
+      height: 42%;
+      pointer-events: none;
+    }
+
+    .capture-stage::before,
+    .waiting-stage::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: min(92vw, 760px);
+      height: 82%;
+      border-radius: 50% 50% 0 0 / 70% 70% 0 0;
+      background:
+        radial-gradient(circle at 50% 30%, rgba(255, 221, 241, 0.96), rgba(246, 173, 216, 0.56) 40%, rgba(0, 0, 0, 0) 74%);
+      filter: blur(6px);
+      opacity: 0.75;
+    }
+
+    .capture-stage::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 12%;
+      transform: translateX(-50%);
+      width: min(74vw, 560px);
+      aspect-ratio: 1 / 0.24;
+      border-radius: 50%;
+      border: 4px solid rgba(92, 36, 119, 0.55);
+      box-shadow:
+        0 0 0 26px rgba(255, 195, 224, 0.22),
+        0 0 0 48px rgba(112, 44, 146, 0.12);
+      opacity: 0.65;
+    }
+
+    .waiting-character {
+      position: absolute;
+      left: 50%;
+      bottom: 9%;
+      transform: translateX(-50%);
+      width: min(60vw, 340px);
+      aspect-ratio: 0.72;
+      border-radius: 46% 46% 42% 42% / 34% 34% 50% 50%;
+      background:
+        radial-gradient(circle at 50% 24%, rgba(255, 233, 209, 0.98), rgba(255, 233, 209, 0.98) 10%, transparent 11%),
+        radial-gradient(circle at 50% 18%, rgba(255, 241, 189, 0.95), rgba(255, 196, 65, 0.94) 16%, rgba(0, 0, 0, 0) 26%),
+        radial-gradient(circle at 50% 55%, rgba(255, 199, 59, 0.98), rgba(247, 152, 42, 0.94) 32%, rgba(59, 17, 16, 0.95) 33%, rgba(59, 17, 16, 0.95) 39%, rgba(241, 170, 50, 0.94) 40%, rgba(241, 170, 50, 0.94) 48%, rgba(55, 17, 16, 0.95) 49%, rgba(55, 17, 16, 0.95) 55%, rgba(226, 143, 36, 0.96) 56%);
+      box-shadow: var(--brand-shadow);
+      opacity: 0.94;
+    }
+
+    .waiting-character::before,
+    .waiting-character::after {
+      content: "";
+      position: absolute;
+      top: 18%;
+      width: 38%;
+      height: 24%;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.24);
+      border: 2px solid rgba(255, 255, 255, 0.22);
+      filter: blur(1px);
+    }
+
+    .waiting-character::before {
+      left: 8%;
+      transform: rotate(-24deg);
+    }
+
+    .waiting-character::after {
+      right: 8%;
+      transform: rotate(24deg);
     }
   </style>
 </head>
@@ -520,10 +757,13 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   ═══════════════════════════════ -->
   <div id="s_cpf" class="screen">
     <img src="assets/tela-02.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;">
+    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:3rem;">
 
-      <!-- Posicionado abaixo do texto do background (logo + "PARA COMEÇAR, INSIRA SEU CPF") -->
-      <div style="width:100%;max-width:480px;margin-top:41vh;">
+      <div class="brand-hero-copy" style="padding-top:24vh;">
+        <p class="brand-subtitle" style="font-size:clamp(26px,4vw,48px);margin-top:2.2rem;">PARA COMEÇAR,<BR>INSIRA SEU CPF</p>
+      </div>
+
+      <div style="width:100%;max-width:75vw;">
 
         <div class="flabel">CPF</div>
 
@@ -564,19 +804,15 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   ═══════════════════════════════ -->
   <div id="s_frame" class="screen">
     <img src="assets/tela-02.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding:0;">
+    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:3rem;">
 
-      <!-- Heading – sem referência específica: mantido mas estilizado consistentemente -->
-      <div style="text-align:center;padding:32px 24px 20px;">
-        <p style="font-size:12px;letter-spacing:4px;color:rgba(255,255,255,.6);
-          text-transform:uppercase;margin-bottom:6px;">VIVA OS FÃS</p>
-        <p style="font-size:24px;font-weight:900;letter-spacing:2px;color:#fff;
-          text-transform:uppercase;text-shadow:0 2px 12px rgba(0,0,0,.4);">ESCOLHA SEU FRAME</p>
+      <div class="brand-hero-copy" style="padding-top:24vh;">
+        <p class="brand-subtitle" style="font-size:clamp(26px,4vw,48px);margin-top:2.2rem;">Escolha seu frame</p>
       </div>
 
       <!-- Frame cards -->
       <div style="display:flex;align-items:center;justify-content:center;
-        width:100%;padding:0 18px;gap:14px;" id="frame_grid">
+        width:100%;padding:3vh 18px 0;gap:14px;" id="frame_grid">
         <div class="frame-card" data-frame="frame_01_front" style="width:calc(33.3% - 10px);aspect-ratio:2/3;">
           <img src="frames/frame_01_front.png" alt="Frame 1" />
         </div>
@@ -599,31 +835,35 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   ═══════════════════════════════ -->
   <div id="s_form" class="screen">
     <img src="assets/tela-04.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding:0;">
+    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:3rem;">
+
+      <div class="brand-hero-copy" style="padding-top:24vh;">
+        <p class="brand-subtitle" style="font-size:clamp(26px,4vw,48px);margin-top:2.2rem;">PREENCHA OS DADOS<BR>PARA PARTICIPAR</p>
+      </div>
 
       <!-- Campos posicionados logo abaixo do texto do background ("PREENCHA OS DADOS PARA PARTICIPAR") -->
-      <div style="width:100%;max-width:500px;padding:0 28px;margin-top:33vh;flex-shrink:0;">
+      <div style="width:100%;max-width:75vw;padding:0 28px;flex-shrink:0;gap:2rem;display:flex;flex-direction:column;">
 
         <div style="margin-bottom:14px;">
           <div class="flabel">NOME</div>
-          <input id="f_name" class="ki" readonly autocomplete="off" maxlength="40" placeholder="Seu nome" />
+          <input id="f_name" class="ki" readonly autocomplete="off" maxlength="26"/>
         </div>
 
         <div style="margin-bottom:14px;">
           <div class="flabel">FANDOM</div>
-          <input id="f_fandom" class="ki" readonly autocomplete="off" maxlength="40" placeholder="Seu fandom" />
+          <input id="f_fandom" class="ki" readonly autocomplete="off" maxlength="26"/>
         </div>
 
         <div style="margin-bottom:14px;">
           <div class="flabel">VIVO OUVINDO</div>
-          <input id="f_track" class="ki" readonly autocomplete="off" maxlength="40" placeholder="Música / artista" />
+          <input id="f_track" class="ki" readonly autocomplete="off" maxlength="26"/>
         </div>
 
-        <div id="form_err" class="err" style="margin-top:6px;"></div>
+        <div id="form_err" class="err" style="margin-top:6px;display:none"></div>
       </div>
 
       <!-- Button -->
-      <div id="form_btn_area" style="padding:16px 28px 0;width:100%;
+      <div id="form_btn_area" style="width:100%;
         display:flex;justify-content:center;transition:opacity .25s;
         min-height:60px;align-items:center;flex-shrink:0;">
         <button id="form_btn" class="btn-p" disabled>CONTINUAR</button>
@@ -643,16 +883,17 @@ $csrf_token = (string)$_SESSION['csrf_token'];
        TELA 5 – CAPTURA
   ═══════════════════════════════ -->
   <div id="s_capture" class="screen">
-    <!-- ATENÇÃO: usa tela-05.png que já contém "SORRIA" no layout -->
     <img src="assets/tela-05.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding:0;">
+    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:3rem;">
+      <div class="brand-hero-copy" style="padding-top:24vh;">
+        <p class="brand-subtitle" style="margin-top:2rem;">Sorria</p>
+      </div>
 
-      <!-- Viewfinder posicionado na grande área de céu de tela-05 -->
       <div style="display:flex;align-items:center;justify-content:center;
-        width:100%;padding:0 28px;margin-top:28vh;">
+        width:100%;padding:0 28px;margin-top:8vh;">
         <div id="cap_box" style="position:relative;width:100%;max-width:340px;
           border-radius:28px;overflow:hidden;background:#111;aspect-ratio:3/4;
-          box-shadow:0 8px 40px rgba(0,0,0,.55);">
+          box-shadow:0 8px 40px rgba(0,0,0,.55);border:4px solid rgba(255,255,255,.78);">
           <video id="camera_video" style="position:absolute;inset:0;width:100%;height:100%;
             object-fit:cover;" autoplay playsinline muted></video>
           <img id="cap_img" style="position:absolute;inset:0;width:100%;height:100%;
@@ -681,13 +922,10 @@ $csrf_token = (string)$_SESSION['csrf_token'];
        TELA 6 – AGUARDANDO
   ═══════════════════════════════ -->
   <div id="s_waiting" class="screen">
-    <!-- ATENÇÃO: usa tela-06.png que já contém "AGUARDE, IMPRIMINDO CARTÃO" -->
     <img src="assets/tela-06.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding:0;">
-
-      <!-- Elementos de progresso posicionados logo abaixo do texto do background -->
+    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:3rem;">
       <div style="text-align:center;z-index:10;position:relative;
-        padding:0 32px;width:100%;margin-top:38vh;">
+        padding:0 32px;width:100%;margin-top:42.5vh;">
 
         <div class="dots" style="margin-bottom:22px;">
           <span></span><span></span><span></span>
@@ -736,7 +974,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       const API_COMPOSE = "api/compose_image.php";
       const API_CPF = "api/validate_cpf.php";
       const API_BG = "http://localhost:5001/remove-bg";
-      const WAIT_SECS = 48; // ← tempo de espera em segundos (editável)
+      const WAIT_SECS = 60; // ← tempo de espera em segundos (editável)
 
       /* ── DOM helpers ──────────────────────────────────── */
       const $ = id => document.getElementById(id);
@@ -1283,7 +1521,6 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         const artist_name = f_fandom.value.trim();
         const track_name = f_track.value.trim();
 
-        wait_msg.style.display = "";
         wait_msg.textContent = "Montando imagem...";
 
         try {
