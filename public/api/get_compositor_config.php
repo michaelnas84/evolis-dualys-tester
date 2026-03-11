@@ -78,6 +78,7 @@ try {
 
     $public_config = [
         'print_mode' => (string)($compositor_config['print_mode'] ?? 'front_only'),
+        'back_first_print_enabled' => (bool)($compositor_config['back_first_print_enabled'] ?? false),
 
         // Backward compatibility for old frontend code
         'photo_box' => $front_photo_box,

@@ -22,6 +22,7 @@ if (is_array($compositor_config)) {
         'text_fields' => (array)$compositor_config['text_fields'],
         'font_file_path' => (string)$compositor_config['font_file_path'],
         'text_color_rgb' => (array)$compositor_config['text_color_rgb'],
+        'back_first_print_enabled' => (bool)($compositor_config['back_first_print_enabled'] ?? false),
     ];
 }
 
@@ -176,6 +177,19 @@ if (is_array($compositor_config)) {
           </div>
         </div>
 
+        <div class="mt-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+          <label class="flex items-start gap-3">
+            <input id="back_first_print_enabled" type="checkbox" class="mt-1 h-5 w-5 rounded border-slate-700 bg-slate-950 text-emerald-500" />
+            <span>
+              <span class="block text-sm font-semibold text-slate-100">Imprimir verso primeiro</span>
+              <span class="mt-1 block text-sm text-slate-400">
+                Se ativado, ao confirmar o frame o quiosque envia só o verso para impressão.
+                Depois, antes da frente, a tela exige duas confirmações.
+              </span>
+            </span>
+          </label>
+        </div>
+
         <div class="mt-4">
           <label class="text-sm text-slate-300">JSON (avançado)</label>
           <textarea id="config_json" rows="10" class="mt-2 w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 font-mono text-xs"></textarea>
@@ -246,6 +260,7 @@ if (is_array($compositor_config)) {
       const size_artist = document.getElementById('size_artist');
       const max_track = document.getElementById('max_track');
       const size_track = document.getElementById('size_track');
+      const back_first_print_enabled = document.getElementById('back_first_print_enabled');
 
       const preview_person = document.getElementById('preview_person');
       const preview_artist = document.getElementById('preview_artist');
@@ -298,6 +313,7 @@ if (is_array($compositor_config)) {
 
         max_track.value = String(current_config.text_fields.track_name.max_chars || 0);
         size_track.value = String(current_config.text_fields.track_name.font_size || 0);
+        back_first_print_enabled.checked = Boolean(current_config.back_first_print_enabled);
 
         config_json.value = JSON.stringify(current_config, null, 2);
       }
@@ -314,6 +330,7 @@ if (is_array($compositor_config)) {
 
         current_config.text_fields.track_name.max_chars = Number(max_track.value || current_config.text_fields.track_name.max_chars);
         current_config.text_fields.track_name.font_size = Number(size_track.value || current_config.text_fields.track_name.font_size);
+        current_config.back_first_print_enabled = Boolean(back_first_print_enabled.checked);
 
         config_json.value = JSON.stringify(current_config, null, 2);
       }
@@ -382,6 +399,10 @@ if (is_array($compositor_config)) {
         el.addEventListener('input', () => {
           applyFormFieldsToConfig();
         });
+      });
+
+      back_first_print_enabled.addEventListener('change', () => {
+        applyFormFieldsToConfig();
       });
 
       reload_button.addEventListener('click', () => {

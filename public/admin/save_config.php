@@ -42,7 +42,7 @@ try {
 
     $override_file_path = (string)$compositor_config['override_file_path'];
 
-    $allowed_keys = ['photo_box', 'text_fields', 'font_file_path', 'text_color_rgb'];
+    $allowed_keys = ['photo_box', 'text_fields', 'font_file_path', 'text_color_rgb', 'back_first_print_enabled'];
     $filtered = [];
     foreach ($allowed_keys as $key) {
         if (array_key_exists($key, $compositor_config_update)) {

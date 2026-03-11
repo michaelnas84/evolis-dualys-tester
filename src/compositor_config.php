@@ -23,6 +23,11 @@ return [
     // When true, the back side also receives photo + dynamic texts.
     'compose_back_with_dynamic_content' => false,
 
+    // Optional kiosk mode:
+    // 1. When the user confirms a frame, the kiosk prints only the back side first.
+    // 2. Later, the front side only prints after double confirmation.
+    'back_first_print_enabled' => false,
+
     // Base layout.
     // Keep this aligned with the front side for backward compatibility.
     'photo_box' => [

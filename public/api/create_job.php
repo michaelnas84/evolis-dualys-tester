@@ -101,6 +101,17 @@ try {
 
     $back_file_name = null;
 
+    if ($print_mode !== 'front_and_back' && $back_composed_image_key !== '') {
+        if (preg_match('/[\/\\\\]/', $back_composed_image_key)) {
+            throw new RuntimeException('Invalid back composed key.');
+        }
+
+        $unused_back_composed_path = joinPath(__DIR__ . '/../../storage/composed', $back_composed_image_key);
+        if (is_file($unused_back_composed_path)) {
+            @unlink($unused_back_composed_path);
+        }
+    }
+
     if ($print_mode === 'front_and_back') {
         $back_binary_data = '';
         $back_mime_type = 'image/png';

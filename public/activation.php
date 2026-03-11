@@ -742,6 +742,11 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     <p style="color:#fff;margin-top:16px;font-size:16px;letter-spacing:1px;">Processando foto...</p>
   </div>
 
+  <button id="flow_back_btn" type="button" style="position:fixed;top:24px;left:24px;z-index:10000;display:none;align-items:center;gap:10px;padding:12px 18px;border:none;border-radius:999px;background:rgba(34,7,56,.82);color:#fff;font-family:'Segoe UI',system-ui,sans-serif;font-size:15px;font-weight:700;letter-spacing:.4px;box-shadow:0 12px 28px rgba(0,0,0,.28);">
+    <span style="font-size:18px;line-height:1;">&larr;</span>
+    <span>VOLTAR</span>
+  </button>
+
   <!-- ═══════════════════════════════
        TELA 1 – IDLE
   ═══════════════════════════════ -->
@@ -921,6 +926,35 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   <!-- ═══════════════════════════════
        TELA 6 – AGUARDANDO
   ═══════════════════════════════ -->
+  <div id="s_confirm_front" class="screen">
+    <img src="assets/tela-06.png" class="bg-img" alt="" />
+    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:2.4rem;">
+      <div class="brand-hero-copy" style="padding-top:24vh;">
+        <p class="brand-subtitle" style="font-size:clamp(26px,4vw,48px);margin-top:2.2rem;">Confirmar impressao da frente</p>
+        <p class="brand-note" style="max-width:620px;margin:1.5rem auto 0;">
+          O verso ja foi enviado. Confirme duas vezes para imprimir a frente.
+        </p>
+      </div>
+
+      <div style="width:100%;display:flex;justify-content:center;padding:0 24px;">
+        <div style="width:100%;max-width:560px;border-radius:28px;background:rgba(51,7,86,.66);box-shadow:0 18px 44px rgba(28,0,43,.34);padding:28px 24px;text-align:center;">
+          <div id="front_confirm_status" style="font-family:'Segoe UI',system-ui,sans-serif;font-size:20px;font-weight:700;color:#fff;">
+            Confirmacao 1 de 2
+          </div>
+          <div id="front_confirm_hint" style="margin-top:12px;font-family:'Segoe UI',system-ui,sans-serif;font-size:16px;color:rgba(255,255,255,.8);">
+            Toque em confirmar para liberar a impressao da frente.
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:12px 24px 0;width:100%;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+        <button id="front_confirm_btn" class="btn-p">CONFIRMAR FRENTE</button>
+        <button id="front_confirm_cancel_btn" class="btn-s">CANCELAR</button>
+      </div>
+      <div id="front_confirm_err" class="err" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
   <div id="s_waiting" class="screen">
     <img src="assets/tela-06.png" class="bg-img" alt="" />
     <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:3rem;">
@@ -968,6 +1002,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       /* ── Config ───────────────────────────────────────── */
       const CSRF = <?= json_encode($csrf_token, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
       const API_JOB = "api/create_job.php";
+      const API_PRINT_BACK = "api/print_frame_back.php";
       const API_RECORD = "api/record_participant.php";
       const API_HEALTH = "api/health.php";
       const API_CFG = "api/get_compositor_config.php";
@@ -985,6 +1020,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         frame: $("s_frame"),
         form: $("s_form"),
         capture: $("s_capture"),
+        confirm_front: $("s_confirm_front"),
         waiting: $("s_waiting"),
         done: $("s_done"),
       };
@@ -1032,6 +1068,13 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       const cap_cancel = $("cap_cancel_btn");
       const cap_err = $("cap_err");
 
+      /* confirm front */
+      const front_confirm_status = $("front_confirm_status");
+      const front_confirm_hint = $("front_confirm_hint");
+      const front_confirm_btn = $("front_confirm_btn");
+      const front_confirm_cancel_btn = $("front_confirm_cancel_btn");
+      const front_confirm_err = $("front_confirm_err");
+
       /* waiting */
       const prog_fill = $("prog_fill");
       const prog_label = $("prog_label");
@@ -1039,6 +1082,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
       /* done */
       const done_tap = $("done_tap");
+      const flow_back_btn = $("flow_back_btn");
 
       /* ── State ────────────────────────────────────────── */
       let cur_screen = "idle";
@@ -1056,6 +1100,8 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       let wait_tid = null;
       let comp_cfg = null;
       let prev_ar = 3 / 4;
+      let back_first_print_enabled = false;
+      let front_confirm_count = 0;
 
       /* ── Screen transition ────────────────────────────── */
       function showScreen(name) {
@@ -1065,6 +1111,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             Object.values(screens).forEach(s => s.classList.remove("active"));
             screens[name].classList.add("active");
             cur_screen = name;
+            syncBackButton();
             setTimeout(() => {
               fade_ovl.classList.remove("fading");
               setTimeout(res, 450);
@@ -1073,9 +1120,79 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         });
       }
 
+      function syncBackButton() {
+        const should_show_back = ["cpf", "frame", "form", "capture", "confirm_front"].includes(cur_screen);
+        flow_back_btn.style.display = should_show_back ? "inline-flex" : "none";
+      }
+
+      async function goBackOneScreen() {
+        if (cur_screen === "cpf") {
+          await goIdle();
+          return;
+        }
+
+        if (cur_screen === "frame") {
+          await showScreen("cpf");
+          return;
+        }
+
+        if (cur_screen === "form") {
+          closeVkb();
+          form_err.textContent = "";
+          await showScreen("frame");
+          return;
+        }
+
+        if (cur_screen === "capture") {
+          stopCam();
+          if (cdown_tid) {
+            clearInterval(cdown_tid);
+            cdown_tid = null;
+          }
+          resetCapture();
+          await showScreen("form");
+          return;
+        }
+
+        if (cur_screen === "confirm_front") {
+          resetFrontConfirmState();
+          await startCaptureScreen();
+        }
+      }
+
       /* ── Loading ──────────────────────────────────────── */
       const showLoad = () => load_ovl.classList.add("visible");
       const hideLoad = () => load_ovl.classList.remove("visible");
+
+      function resetFrontConfirmState() {
+        front_confirm_count = 0;
+        front_confirm_status.textContent = "Confirmacao 1 de 2";
+        front_confirm_hint.textContent = "Toque em confirmar para liberar a impressao da frente.";
+        front_confirm_err.textContent = "";
+        front_confirm_btn.disabled = false;
+      }
+
+      async function printBackForSelectedFrame() {
+        if (!selected_frame) throw new Error("Nenhum frame selecionado.");
+
+        showLoad();
+        try {
+          const r = await fetch(API_PRINT_BACK, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              csrf_token: CSRF,
+              frame_name: selected_frame
+            })
+          });
+          const d = await r.json();
+          if (!d.ok) throw new Error(d.error || "Falha ao imprimir verso.");
+        } finally {
+          hideLoad();
+        }
+      }
 
       /* ── Health check ─────────────────────────────────── */
       async function fetchHealth() {
@@ -1188,7 +1305,15 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       });
 
       frame_btn.addEventListener("click", async () => {
-        await showScreen("form");
+        try {
+          if (back_first_print_enabled) {
+            await printBackForSelectedFrame();
+            resetFrontConfirmState();
+          }
+          await showScreen("form");
+        } catch (e) {
+          alert(String(e.message || e));
+        }
       });
 
       /* ════════════════════════════════════════════════════
@@ -1491,8 +1616,13 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         cap_img.style.display = "none";
       });
 
-      cap_proceed.addEventListener("click", () => {
+      cap_proceed.addEventListener("click", async () => {
         stopCam();
+        if (back_first_print_enabled) {
+          resetFrontConfirmState();
+          await showScreen("confirm_front");
+          return;
+        }
         submitAndWait();
       });
 
@@ -1509,11 +1639,30 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       });
 
       cap_cancel.addEventListener("click", goIdle);
+      flow_back_btn.addEventListener("click", goBackOneScreen);
+
+      front_confirm_btn.addEventListener("click", async () => {
+        front_confirm_err.textContent = "";
+
+        if (front_confirm_count === 0) {
+          front_confirm_count = 1;
+          front_confirm_status.textContent = "Confirmacao 2 de 2";
+          front_confirm_hint.textContent = "Confirme novamente para imprimir a frente agora.";
+          return;
+        }
+
+        front_confirm_btn.disabled = true;
+        await submitAndWait(true);
+      });
+
+      front_confirm_cancel_btn.addEventListener("click", async () => {
+        await goBackOneScreen();
+      });
 
       /* ════════════════════════════════════════════════════
          SUBMIT + AGUARDAR
       ════════════════════════════════════════════════════ */
-      async function submitAndWait() {
+      async function submitAndWait(front_only_override = false) {
         await showScreen("waiting");
         startWait();
 
@@ -1548,6 +1697,8 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           if (!fk) throw new Error("Sem front_image_key.");
 
           wait_msg.textContent = "Enviando para impressão...";
+          const should_print_back_now = !front_only_override && Boolean(bk);
+          const final_print_mode = should_print_back_now ? "front_and_back" : "front_only";
 
           const jr = await fetch(API_JOB, {
             method: "POST",
@@ -1556,7 +1707,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             },
             body: JSON.stringify({
               csrf_token: CSRF,
-              print_mode: bk ? "front_and_back" : "front_only",
+              print_mode: final_print_mode,
               front_composed_image_key: fk,
               back_composed_image_key: bk,
               front_image_data_url: "",
@@ -1584,9 +1735,9 @@ $csrf_token = (string)$_SESSION['csrf_token'];
               frame_name: selected_frame,
               job_id: jd.job_id,
               job_folder_path: jd.job_folder_path || "",
-              print_mode: bk ? "front_and_back" : "front_only",
+              print_mode: back_first_print_enabled ? "front_and_back" : final_print_mode,
               front_image_key: fk,
-              back_image_key: bk,
+              back_image_key: should_print_back_now ? bk : "",
             })
           }).catch(() => {});
 
@@ -1636,6 +1787,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
         /* reset frame */
         selected_frame = null;
+        resetFrontConfirmState();
         frame_cards.forEach(c => c.classList.remove("selected"));
         frame_btn.disabled = true;
 
@@ -1672,6 +1824,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
           const d = await r.json();
           if (!d.ok) return;
           comp_cfg = d.compositor_config;
+          back_first_print_enabled = Boolean(comp_cfg?.back_first_print_enabled);
           const pb = comp_cfg?.side_layouts?.front?.photo_box || comp_cfg?.photo_box || {};
           const ar = Number(pb.width) / Number(pb.height);
           if (Number.isFinite(ar) && ar > 0) {
@@ -1730,6 +1883,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
 
       /* ── Init ────────────────────────────────────────── */
       buildVkb();
+      resetFrontConfirmState();
       fetchHealth();
       loadCfg();
 
