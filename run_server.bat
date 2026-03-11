@@ -15,7 +15,7 @@ REM ==============================
 
 echo Iniciando servidor Python (remove background)...
 
-start "Python BG Server" cmd /k "py scripts\remove_bg.py"
+start "Python BG Server" cmd /k "py -3.11 scripts\remove_bg.py"
 
 timeout /t 3 >nul
 
