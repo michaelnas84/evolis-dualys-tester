@@ -1079,7 +1079,8 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       const API_COMPOSE = "api/compose_image.php";
       const API_CPF = "api/validate_cpf.php";
       const API_BG = "http://localhost:5001/remove-bg";
-      const WAIT_SECS = 60; // ← tempo de espera em segundos (editável)
+      const WAIT_SECS_FRONT_AND_BACK = 60;
+      const WAIT_SECS_BACK_FIRST_FRONT_ONLY = 28;
 
       /* ── DOM helpers ──────────────────────────────────── */
       const $ = id => document.getElementById(id);
@@ -1738,9 +1739,16 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       /* ════════════════════════════════════════════════════
          SUBMIT + AGUARDAR
       ════════════════════════════════════════════════════ */
+      function getWaitSeconds(front_only_override = false) {
+        if (front_only_override && back_first_print_enabled) {
+          return WAIT_SECS_BACK_FIRST_FRONT_ONLY;
+        }
+        return WAIT_SECS_FRONT_AND_BACK;
+      }
+
       async function submitAndWait(front_only_override = false) {
         await showScreen("waiting");
-        startWait();
+        startWait(getWaitSeconds(front_only_override));
 
         const person_name = f_name.value.trim();
         const artist_name = f_fandom.value.trim();
@@ -1823,17 +1831,17 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         }
       }
 
-      function startWait() {
+      function startWait(wait_seconds) {
         if (wait_tid) clearInterval(wait_tid);
         let el = 0;
         prog_fill.style.width = "0%";
-        prog_label.textContent = `0 / ${WAIT_SECS}s`;
+        prog_label.textContent = `0 / ${wait_seconds}s`;
         wait_tid = setInterval(async () => {
           el++;
-          const pct = Math.min(100, (el / WAIT_SECS) * 100);
+          const pct = Math.min(100, (el / wait_seconds) * 100);
           prog_fill.style.width = pct + "%";
-          prog_label.textContent = `${el} / ${WAIT_SECS}s`;
-          if (el >= WAIT_SECS) {
+          prog_label.textContent = `${el} / ${wait_seconds}s`;
+          if (el >= wait_seconds) {
             clearInterval(wait_tid);
             wait_tid = null;
             await showScreen("done");
