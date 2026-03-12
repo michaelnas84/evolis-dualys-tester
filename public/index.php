@@ -59,7 +59,7 @@ declare(strict_types=1);
             </div>
         </header>
 
-        <main class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <main class="grid grid-cols-1 gap-6 md:grid-cols-3">
             <a href="activation.php" class="card_enter glass_panel section_shadow rounded-3xl border border-white/60 p-8 transition hover:-translate-y-1 hover:border-indigo-200">
                 <div class="mb-4 inline-flex rounded-2xl bg-indigo-100 px-4 py-2 text-sm font-bold text-indigo-700">
                     Ativação
@@ -83,6 +83,18 @@ declare(strict_types=1);
                 </p>
                 <div class="mt-6 text-sm font-bold text-emerald-700">
                     Abrir dashboard →
+                </div>
+            </a>
+            <a href="report.php" target="_blank" rel="noopener noreferrer" class="card_enter glass_panel section_shadow rounded-3xl border border-white/60 p-8 transition hover:-translate-y-1 hover:border-teal-200">
+                <div class="mb-4 inline-flex rounded-2xl bg-teal-100 px-4 py-2 text-sm font-bold text-teal-700">
+                    Relatório operacional
+                </div>
+                <h2 class="text-2xl font-black text-slate-900">Relatório de ativações</h2>
+                <p class="mt-3 text-sm text-slate-600">
+                    Abra em nova aba a visÃ£o por data, hora, mapa de calor, fila da hotfolder e comparativos para o usuÃ¡rio final.
+                </p>
+                <div class="mt-6 text-sm font-bold text-teal-700">
+                    Abrir relatório →
                 </div>
             </a>
         </main>

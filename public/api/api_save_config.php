@@ -7,12 +7,16 @@ require_once __DIR__ . '\\api_common.php';
 
 try {
     assertRequestMethod('POST');
+    assertAdminUnlocked();
 
     ensureHotfolderStructure();
+    $config_result = ensureConfigFileExists();
 
     $config_payload = getJsonInput();
     validateConfigPayload($config_payload);
-    writeConfigFile($config_payload);
+    $merged_payload = deepMergeArrays((array)($config_result['raw_data'] ?? []), $config_payload);
+    validateConfigPayload($merged_payload);
+    writeConfigFile($merged_payload);
 
     respondJson(200, [
         'success' => true,

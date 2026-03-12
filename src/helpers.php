@@ -102,3 +102,34 @@ function jsonResponse(array $payload, int $status_code = 200): void
     echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+function ensureSessionStarted(): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+}
+
+function isAdminUnlocked(): bool
+{
+    ensureSessionStarted();
+    return (bool)($_SESSION['admin_unlocked'] ?? false);
+}
+
+function ensureAdminUnlockedJson(): void
+{
+    if (!isAdminUnlocked()) {
+        jsonResponse(['ok' => false, 'error' => 'Not authorized.'], 403);
+    }
+}
+
+function ensureCsrfToken(): string
+{
+    ensureSessionStarted();
+
+    if (!isset($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+    }
+
+    return (string)$_SESSION['csrf_token'];
+}

@@ -400,7 +400,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     /* ── Numpad ── */
     .numpad {
       position: absolute;
-      bottom: 40vh;
+      bottom: 36vh;
       left: 0;
       right: 0;
       background: rgba(67, 15, 103, .72);
@@ -424,6 +424,12 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       gap: 12px;
       max-width: 360px;
       margin: 0 auto;
+    }
+
+    .np-actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 14px;
     }
 
     .np-key {
@@ -457,6 +463,28 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       background: transparent;
       border: none;
       cursor: default;
+    }
+
+    .np-ok {
+      min-width: 180px;
+      height: 62px;
+      padding: 0 28px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, .22);
+      border-bottom: 3px solid rgba(0, 0, 0, .45);
+      background: rgba(255, 255, 255, .18);
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: background .16s, transform .1s;
+    }
+
+    .np-ok:active {
+      background: rgba(255, 255, 255, .3);
+      transform: scale(.96);
     }
 
     /* ── Frame selection ── */
@@ -730,6 +758,45 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       right: 8%;
       transform: rotate(24deg);
     }
+
+    .confirm-front-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      background: rgba(7, 2, 16, 0.52);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      opacity: 0;
+      transition: opacity .3s ease;
+      pointer-events: none;
+      z-index: 11;
+    }
+
+    .confirm-front-panel {
+      width: min(100%, 640px);
+      border-radius: 32px;
+      border: 1px solid rgba(255, 255, 255, .16);
+      background: linear-gradient(180deg, rgba(55, 10, 90, .92) 0%, rgba(33, 7, 56, .88) 100%);
+      box-shadow: 0 28px 80px rgba(0, 0, 0, .4);
+      padding: 34px 28px 30px;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(18px) scale(.98);
+      transition: opacity .34s ease, transform .34s ease;
+    }
+
+    #s_confirm_front.active .confirm-front-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #s_confirm_front.active .confirm-front-panel {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   </style>
 </head>
 
@@ -800,6 +867,9 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         <div class="np-key empty"></div>
         <div class="np-key" data-d="0">0</div>
         <div class="np-key del" id="np_del">⌫</div>
+      </div>
+      <div class="np-actions">
+        <button id="np_ok" type="button" class="np-ok">OK</button>
       </div>
     </div>
   </div>
@@ -928,16 +998,16 @@ $csrf_token = (string)$_SESSION['csrf_token'];
   ═══════════════════════════════ -->
   <div id="s_confirm_front" class="screen">
     <img src="assets/tela-06.png" class="bg-img" alt="" />
-    <div class="screen-body" style="justify-content:flex-start;padding:0 32px;gap:2.4rem;">
-      <div class="brand-hero-copy" style="padding-top:24vh;">
-        <p class="brand-subtitle" style="font-size:clamp(26px,4vw,48px);margin-top:2.2rem;">Confirmar impressao da frente</p>
-        <p class="brand-note" style="max-width:620px;margin:1.5rem auto 0;">
-          O verso ja foi enviado. Confirme duas vezes para imprimir a frente.
-        </p>
-      </div>
+    <div class="confirm-front-overlay">
+      <div class="confirm-front-panel">
+        <div class="brand-hero-copy" style="width:100%;max-width:none;padding:0;text-align:center;">
+          <p class="brand-subtitle" style="font-size:clamp(26px,4vw,48px);margin-top:0;">Confirmar impressao da frente</p>
+          <p class="brand-note" style="max-width:520px;margin:1.2rem auto 0;">
+            O verso ja foi enviado. Confirme duas vezes para imprimir a frente.
+          </p>
+        </div>
 
-      <div style="width:100%;display:flex;justify-content:center;padding:0 24px;">
-        <div style="width:100%;max-width:560px;border-radius:28px;background:rgba(51,7,86,.66);box-shadow:0 18px 44px rgba(28,0,43,.34);padding:28px 24px;text-align:center;">
+        <div style="margin-top:24px;border-radius:28px;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);padding:28px 24px;text-align:center;">
           <div id="front_confirm_status" style="font-family:'Segoe UI',system-ui,sans-serif;font-size:20px;font-weight:700;color:#fff;">
             Confirmacao 1 de 2
           </div>
@@ -945,13 +1015,13 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             Toque em confirmar para liberar a impressao da frente.
           </div>
         </div>
-      </div>
 
-      <div style="padding:12px 24px 0;width:100%;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
-        <button id="front_confirm_btn" class="btn-p">CONFIRMAR FRENTE</button>
-        <button id="front_confirm_cancel_btn" class="btn-s">CANCELAR</button>
+        <div style="padding:22px 0 0;width:100%;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+          <button id="front_confirm_btn" class="btn-p">CONFIRMAR FRENTE</button>
+          <button id="front_confirm_cancel_btn" class="btn-s">CANCELAR</button>
+        </div>
+        <div id="front_confirm_err" class="err" style="margin-top:12px;"></div>
       </div>
-      <div id="front_confirm_err" class="err" style="margin-top:8px;"></div>
     </div>
   </div>
 
@@ -1039,6 +1109,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       const cpf_err = $("cpf_err");
       const numpad = $("numpad");
       const np_del = $("np_del");
+      const np_ok = $("np_ok");
       const cpf_barea = $("cpf_btn_area");
 
       /* frame */
@@ -1262,6 +1333,11 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         e.stopPropagation();
         cpf_digits = cpf_digits.slice(0, -1);
         renderCpf();
+      });
+
+      np_ok.addEventListener("click", e => {
+        e.stopPropagation();
+        closeNumpad();
       });
 
       cpf_btn.addEventListener("click", async () => {
@@ -1854,7 +1930,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             alert("Destrave o admin primeiro.");
             return;
           }
-          window.open("admin/index.php", "_blank");
+          window.open("dashboard.php", "_blank");
           return;
         }
         if (admin_ok) return;

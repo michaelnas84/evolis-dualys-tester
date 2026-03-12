@@ -7,6 +7,7 @@ require_once __DIR__ . '\\api_common.php';
 
 try {
     assertRequestMethod('POST');
+    assertAdminUnlocked();
     ensureHotfolderStructure();
 
     $payload = getJsonInput();

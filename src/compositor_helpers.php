@@ -3,22 +3,36 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/helpers.php';
 
+function loadJsonFileArray(string $file_path): array
+{
+    if (!is_file($file_path)) {
+        return [];
+    }
+
+    $raw = file_get_contents($file_path);
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function loadCompositorOverrideConfig(?array $base_config = null): array
+{
+    $base_config = $base_config ?? require __DIR__ . '/compositor_config.php';
+    $override_file_path = (string)$base_config['override_file_path'];
+
+    return loadJsonFileArray($override_file_path);
+}
+
 function loadCompositorConfig(): array
 {
     $base = require_once __DIR__ . '/compositor_config.php';
 
     ensureAdminPasswordHashFile($base);
 
-    $override_file_path = (string)$base['override_file_path'];
-    if (is_file($override_file_path)) {
-        $raw = file_get_contents($override_file_path);
-        if (is_string($raw) && trim($raw) !== '') {
-            $decoded = json_decode($raw, true);
-            if (is_array($decoded)) {
-                $base = array_replace_recursive($base, $decoded);
-            }
-        }
-    }
+    $base = array_replace_recursive($base, loadCompositorOverrideConfig($base));
 
     return $base;
 }

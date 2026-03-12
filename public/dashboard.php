@@ -1,6 +1,12 @@
 <?php
 declare(strict_types=1);
 
+require __DIR__ . '/../src/helpers.php';
+require __DIR__ . '/../src/compositor_helpers.php';
+
+ensureSessionStarted();
+$csrf_token = ensureCsrfToken();
+
 function getPrinterProfiles(): array
 {
     return [
@@ -46,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
     header('Content-Type: application/json; charset=utf-8');
 
     try {
+        ensureAdminUnlockedJson();
+
         $raw_input = file_get_contents('php://input');
         if ($raw_input === false || trim($raw_input) === '') {
             throw new RuntimeException('Empty request body.');
@@ -133,6 +141,97 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'print_
 }
 
 $printer_profiles = getPrinterProfiles();
+$admin_unlocked = isAdminUnlocked();
+$compositor_base_config = require __DIR__ . '/../src/compositor_config.php';
+$compositor_override_config = loadCompositorOverrideConfig($compositor_base_config);
+$compositor_effective_config = array_replace_recursive($compositor_base_config, $compositor_override_config);
+
+if (!$admin_unlocked):
+?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Central</title>
+    <script src="js/tailwind.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+    <div class="mx-auto flex min-h-screen max-w-md items-center px-6 py-10">
+        <div class="w-full rounded-3xl border border-slate-800 bg-slate-900 p-8 shadow-2xl shadow-slate-950/40">
+            <div class="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-300">Painel central</div>
+            <h1 class="mt-3 text-3xl font-black text-white">Acesso protegido por senha</h1>
+            <p class="mt-3 text-sm leading-6 text-slate-400">
+                Esta central unifica hotfolder e compositor. Ela sempre carrega os arquivos finais em uso antes de salvar.
+            </p>
+
+            <div class="mt-6">
+                <label for="password_input" class="text-sm font-semibold text-slate-300">Senha</label>
+                <input id="password_input" type="password" class="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none transition focus:border-emerald-400" />
+            </div>
+
+            <button id="login_button" class="mt-5 w-full rounded-2xl bg-white px-4 py-3 text-sm font-black uppercase tracking-[0.18em] text-slate-950 transition hover:bg-emerald-100">
+                Entrar
+            </button>
+
+            <div id="login_error" class="mt-3 min-h-5 text-sm text-rose-300"></div>
+
+            <a href="index.php" class="mt-6 inline-flex text-sm font-semibold text-slate-400 transition hover:text-white">
+                Voltar para a central
+            </a>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const passwordInput = document.getElementById("password_input");
+            const loginButton = document.getElementById("login_button");
+            const loginError = document.getElementById("login_error");
+
+            async function submitLogin() {
+                loginError.textContent = "";
+
+                const password = passwordInput.value || "";
+                if (!password) {
+                    loginError.textContent = "Digite a senha.";
+                    return;
+                }
+
+                try {
+                    const response = await fetch("admin/unlock.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ password })
+                    });
+                    const payload = await response.json();
+
+                    if (!response.ok || !payload.ok) {
+                        loginError.textContent = payload.error || "Senha inválida.";
+                        return;
+                    }
+
+                    window.location.reload();
+                } catch {
+                    loginError.textContent = "Falha ao autenticar.";
+                }
+            }
+
+            loginButton.addEventListener("click", submitLogin);
+            passwordInput.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    submitLogin();
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
+<?php
+exit;
+endif;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -228,6 +327,32 @@ $printer_profiles = getPrinterProfiles();
             border: 1px solid rgb(226 232 240);
             background: white;
             padding: 1rem;
+        }
+
+        .compositor_box {
+            position: absolute;
+            border-width: 2px;
+        }
+
+        .compositor_label {
+            position: absolute;
+            left: 0;
+            top: -1.8rem;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.86);
+            padding: 0.2rem 0.55rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .compositor_handle {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            height: 1rem;
+            width: 1rem;
+            cursor: nwse-resize;
         }
     </style>
 </head>
@@ -773,50 +898,228 @@ $printer_profiles = getPrinterProfiles();
                     </div>
                 </div>
             </section>
+
+            <section class="card_enter glass_panel section_shadow rounded-3xl border border-white/60 p-6">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <h2 class="section_title">Compositor e kiosk</h2>
+                        <p class="section_subtitle">
+                            Esta ediÃ§Ã£o usa o arquivo real <span class="font-semibold">storage/compositor_config.json</span> como base de salvamento.
+                            Se algum valor sÃ³ existir no arquivo final, ele Ã© preservado e nÃ£o some ao clicar em salvar.
+                        </p>
+                    </div>
+
+                    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                        Fonte da verdade: storage/compositor_config.json
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
+                    <div class="space-y-6">
+                        <div class="rounded-3xl border border-slate-200 bg-white p-5">
+                            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <div class="text-lg font-black text-slate-900">Layout visual por lado</div>
+                                    <p class="field_help">
+                                        Arraste e redimensione as caixas no frame. A ediÃ§Ã£o da frente atualiza tambÃ©m a base legada do arquivo para manter compatibilidade.
+                                    </p>
+                                </div>
+
+                                <div class="flex flex-wrap gap-2">
+                                    <button id="compositor_side_front_button" type="button" class="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">
+                                        Frente
+                                    </button>
+                                    <button id="compositor_side_back_button" type="button" class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">
+                                        Verso
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 rounded-3xl border border-slate-200 bg-slate-950 p-3">
+                                <div id="compositor_stage" class="relative mx-auto overflow-hidden rounded-[28px]" style="max-width: 520px;">
+                                    <img id="compositor_frame_image" src="frames/frame_01_front.png" alt="Frame do compositor" class="block h-auto w-full" />
+
+                                    <div id="compositor_box_photo" class="compositor_box border-emerald-400/90 bg-emerald-400/10">
+                                        <div class="compositor_label">Foto</div>
+                                        <div class="compositor_handle bg-emerald-400"></div>
+                                    </div>
+
+                                    <div id="compositor_box_person_name" class="compositor_box border-sky-400/90 bg-sky-400/10">
+                                        <div class="compositor_label">Nome</div>
+                                        <div class="compositor_handle bg-sky-400"></div>
+                                    </div>
+
+                                    <div id="compositor_box_artist_name" class="compositor_box border-fuchsia-400/90 bg-fuchsia-400/10">
+                                        <div class="compositor_label">Artista</div>
+                                        <div class="compositor_handle bg-fuchsia-400"></div>
+                                    </div>
+
+                                    <div id="compositor_box_track_name" class="compositor_box border-amber-400/90 bg-amber-400/10">
+                                        <div class="compositor_label">MÃºsica</div>
+                                        <div class="compositor_handle bg-amber-400"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-3xl border border-slate-200 bg-white p-5">
+                            <div class="text-lg font-black text-slate-900">Campos principais</div>
+                            <p class="field_help">
+                                Estes campos sÃ£o preenchidos a partir do layout efetivo em uso. O JSON abaixo continua disponÃ­vel para ediÃ§Ã£o avanÃ§ada.
+                            </p>
+
+                            <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div class="md:col-span-2">
+                                    <label for="compositor_font_file_path" class="field_label">Fonte TTF</label>
+                                    <input id="compositor_font_file_path" type="text" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_oversize_factor" class="field_label">Oversize da foto</label>
+                                    <input id="compositor_oversize_factor" type="number" step="0.01" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_print_mode" class="field_label">Modo de impressÃ£o</label>
+                                    <select id="compositor_print_mode" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                        <option value="front_only">front_only</option>
+                                        <option value="front_and_back">front_and_back</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="field_label">Cor do texto</label>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <input id="compositor_text_color_r" type="number" min="0" max="255" placeholder="R" class="input_focus_ring rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                        <input id="compositor_text_color_g" type="number" min="0" max="255" placeholder="G" class="input_focus_ring rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                        <input id="compositor_text_color_b" type="number" min="0" max="255" placeholder="B" class="input_focus_ring rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <label class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <input id="compositor_back_first_print_enabled" type="checkbox" class="mt-1 h-5 w-5 rounded border-slate-300">
+                                        <span>
+                                            <span class="block text-sm font-bold text-slate-900">Imprimir verso primeiro</span>
+                                            <span class="mt-1 block text-xs text-slate-500">Controla a confirmaÃ§Ã£o dupla antes da frente na ativaÃ§Ã£o.</span>
+                                        </span>
+                                    </label>
+
+                                    <label class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <input id="compositor_compose_back_with_dynamic_content" type="checkbox" class="mt-1 h-5 w-5 rounded border-slate-300">
+                                        <span>
+                                            <span class="block text-sm font-bold text-slate-900">Compor verso dinÃ¢mico</span>
+                                            <span class="mt-1 block text-xs text-slate-500">Quando ligado, o verso tambÃ©m usa foto e textos dinÃ¢micos.</span>
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div>
+                                    <label for="compositor_max_person" class="field_label">MÃ¡x chars - nome</label>
+                                    <input id="compositor_max_person" type="number" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_size_person" class="field_label">Fonte - nome</label>
+                                    <input id="compositor_size_person" type="number" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_max_artist" class="field_label">MÃ¡x chars - artista</label>
+                                    <input id="compositor_max_artist" type="number" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_size_artist" class="field_label">Fonte - artista</label>
+                                    <input id="compositor_size_artist" type="number" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_max_track" class="field_label">MÃ¡x chars - mÃºsica</label>
+                                    <input id="compositor_max_track" type="number" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_size_track" class="field_label">Fonte - mÃºsica</label>
+                                    <input id="compositor_size_track" type="number" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-3xl border border-slate-200 bg-white p-5">
+                            <div class="text-lg font-black text-slate-900">Preview do compositor</div>
+                            <p class="field_help">
+                                O preview usa o endpoint real de composiÃ§Ã£o em modo <span class="font-semibold">preview_only</span> sem avanÃ§ar frame nem gerar job.
+                            </p>
+
+                            <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label for="compositor_preview_person" class="field_label">Nome</label>
+                                    <input id="compositor_preview_person" type="text" value="Seu Nome" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_preview_artist" class="field_label">Artista</label>
+                                    <input id="compositor_preview_artist" type="text" value="Artista" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_preview_track" class="field_label">MÃºsica</label>
+                                    <input id="compositor_preview_track" type="text" value="MÃºsica" class="input_focus_ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                </div>
+
+                                <div>
+                                    <label for="compositor_preview_photo" class="field_label">Foto</label>
+                                    <input id="compositor_preview_photo" type="file" accept="image/*" class="block w-full text-sm text-slate-700">
+                                </div>
+                            </div>
+
+                            <div class="mt-5 flex flex-wrap gap-3">
+                                <button id="compositor_preview_button" type="button" class="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-500">
+                                    Gerar preview
+                                </button>
+                            </div>
+
+                            <div id="compositor_preview_error" class="mt-3 min-h-5 text-sm text-rose-500"></div>
+                            <img id="compositor_preview_image" class="mt-4 hidden w-full rounded-3xl border border-slate-200 bg-slate-100" alt="Preview do compositor">
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="rounded-3xl border border-slate-200 bg-white p-5">
+                            <div class="flex flex-wrap gap-3">
+                                <button id="compositor_save_button" type="button" class="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-500">
+                                    Salvar compositor
+                                </button>
+                                <button id="compositor_reload_button" type="button" class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                    Recarregar compositor
+                                </button>
+                            </div>
+
+                            <div id="compositor_save_status" class="mt-3 min-h-5 text-sm text-slate-500"></div>
+                        </div>
+
+                        <div class="rounded-3xl border border-slate-200 bg-white p-5">
+                            <div class="text-lg font-black text-slate-900">JSON do override</div>
+                            <p class="field_help">
+                                Este campo mostra o conteúdo que serÃ¡ gravado no override. Campos ausentes no arquivo final continuam ausentes atÃ© vocÃª realmente alterÃ¡-los.
+                            </p>
+
+                            <textarea id="compositor_config_json" rows="30" class="mt-4 w-full rounded-3xl border border-slate-200 bg-slate-950 px-4 py-4 font-mono text-xs leading-6 text-emerald-300 outline-none"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
     <div id="toast_container" class="fixed bottom-5 right-5 z-50 flex w-full max-w-sm flex-col gap-3"></div>
 
     <script>
-        const printer_profile_presets = {
-            evolis_dualys_series: {
-                printer_profile: "evolis_dualys_series",
-                printer_defaults: {
-                    printer_is_duplex: false
-                },
-                template_print: {
-                    printer_is_duplex: false
-                }
-            },
-            zebra_zc300: {
-                printer_profile: "zebra_zc300",
-                printer_defaults: {
-                    printer_vendor: "zebra",
-                    printer_model: "zc300",
-                    printer_is_duplex: false,
-                    card_canvas_px: {
-                        width_px: 1006,
-                        height_px: 640
-                    },
-                    rotate_180_mode: "none",
-                    card_source: "auto",
-                    card_destination: "output",
-                    enable_encoding: false
-                },
-                template_print: {
-                    printer_is_duplex: false,
-                    card_canvas_px: {
-                        width_px: 1006,
-                        height_px: 640
-                    },
-                    rotate_180_mode: "none",
-                    card_source: "auto",
-                    card_destination: "output",
-                    enable_encoding: false
-                }
-            }
-        };
+        const compositorBaseConfig = <?= json_encode($compositor_base_config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+        const initialCompositorSource = <?= json_encode($compositor_override_config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+        const initialCompositorEffective = <?= json_encode($compositor_effective_config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+        const compositorPreviewCsrfToken = <?= json_encode($csrf_token, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
         function getElement(element_id) {
             return document.getElementById(element_id);
@@ -841,6 +1144,12 @@ $printer_profiles = getPrinterProfiles();
 
             return value;
         }
+
+        let initialHotfolderRawConfig = {};
+        let currentHotfolderRawConfig = {};
+        let initialCompositorSourceState = deepClone(initialCompositorSource);
+        let currentCompositorSource = deepClone(initialCompositorSourceState);
+        let currentCompositorSide = "front";
 
         function mergeDeep(base_object, override_object) {
             const merged_object = deepClone(base_object);
@@ -919,10 +1228,12 @@ $printer_profiles = getPrinterProfiles();
         function bindToggle(toggle_id, hidden_input_id) {
             const toggle_element = getElement(toggle_id);
 
-            toggle_element.addEventListener("click", () => {
+            toggle_element.addEventListener("click", async () => {
                 const hidden_input_element = getElement(hidden_input_id);
                 setToggle(toggle_id, hidden_input_id, hidden_input_element.value !== "true");
+                currentHotfolderRawConfig = deepClone(payload);
                 refreshJsonPreview();
+                await loadDashboard(false);
             });
         }
 
@@ -1041,8 +1352,11 @@ $printer_profiles = getPrinterProfiles();
             renderAssetStatusCard("static_back", status_payload.files?.static_back ?? null);
         }
 
-        function populateForm(config_payload) {
-            const printer_profile = config_payload.printer_profile ?? "evolis_dualys_series";
+        function populateForm(config_payload, raw_config_payload = {}) {
+            initialHotfolderRawConfig = deepClone(raw_config_payload ?? {});
+            currentHotfolderRawConfig = deepClone(raw_config_payload ?? {});
+
+            const printer_profile = config_payload.printer_profile ?? getSelectedPrinterProfile();
             getElement("printer_profile").value = printer_profile;
 
             const printer_defaults = config_payload.printer_defaults ?? {};
@@ -1102,10 +1416,7 @@ $printer_profiles = getPrinterProfiles();
         }
 
         function buildConfigPayload() {
-            const printer_profile = getSelectedPrinterProfile();
-
-            const common_payload = {
-                printer_profile,
+            return mergeDeep(currentHotfolderRawConfig, {
                 printer_defaults: {
                     printer_name: getElement("printer_name").value ?? "",
                     copies: Math.max(1, getNumberValue("copies", 1)),
@@ -1158,10 +1469,7 @@ $printer_profiles = getPrinterProfiles();
                     enable_named_front_back_jobs: getBooleanFromInput("enable_named_front_back_jobs"),
                     enable_single_file_jobs: getBooleanFromInput("enable_single_file_jobs")
                 }
-            };
-
-            const profile_preset = printer_profile_presets[printer_profile] ?? printer_profile_presets.evolis_dualys_series;
-            return mergeDeep(profile_preset, common_payload);
+            });
         }
 
         function refreshJsonPreview() {
@@ -1208,6 +1516,7 @@ $printer_profiles = getPrinterProfiles();
         function normalizeDashboardPayload(response_payload) {
             return {
                 config_data: response_payload.data ?? null,
+                raw_config_data: response_payload.raw_data ?? null,
                 status_data: response_payload.status ?? null
             };
         }
@@ -1231,7 +1540,7 @@ $printer_profiles = getPrinterProfiles();
                 const normalized_payload = normalizeDashboardPayload(response_payload);
 
                 if (normalized_payload.config_data) {
-                    populateForm(normalized_payload.config_data);
+                    populateForm(normalized_payload.config_data, normalized_payload.raw_config_data ?? {});
                 } else {
                     refreshJsonPreview();
                 }
@@ -1252,13 +1561,14 @@ $printer_profiles = getPrinterProfiles();
 
         async function saveConfig(show_success_toast = true) {
             try {
+                const payload = buildConfigPayload();
                 const response = await fetch("api/api_save_config.php", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         "Accept": "application/json"
                     },
-                    body: JSON.stringify(buildConfigPayload())
+                    body: JSON.stringify(payload)
                 });
 
                 const response_payload = await response.json();
@@ -1422,6 +1732,463 @@ $printer_profiles = getPrinterProfiles();
             }
         }
 
+        function getCompositorMergedConfig(source_object = currentCompositorSource) {
+            return mergeDeep(compositorBaseConfig, source_object ?? {});
+        }
+
+        function getCompositorSideConfig(side_name = currentCompositorSide) {
+            const merged_config = getCompositorMergedConfig();
+            const side_layout = merged_config.side_layouts?.[side_name] ?? {};
+
+            return {
+                photo_box: side_layout.photo_box ?? merged_config.photo_box ?? {},
+                text_fields: side_layout.text_fields ?? merged_config.text_fields ?? {}
+            };
+        }
+
+        function getCompositorSideTextField(side_name, field_name) {
+            return getCompositorSideConfig(side_name).text_fields?.[field_name] ?? {};
+        }
+
+        function ensureCompositorSideSource(side_name) {
+            if (!currentCompositorSource.side_layouts || typeof currentCompositorSource.side_layouts !== "object") {
+                currentCompositorSource.side_layouts = {};
+            }
+
+            if (!currentCompositorSource.side_layouts[side_name] || typeof currentCompositorSource.side_layouts[side_name] !== "object") {
+                currentCompositorSource.side_layouts[side_name] = {};
+            }
+
+            return currentCompositorSource.side_layouts[side_name];
+        }
+
+        function setCompositorPhotoBoxForSide(side_name, next_box) {
+            const side_source = ensureCompositorSideSource(side_name);
+            side_source.photo_box = mergeDeep(side_source.photo_box ?? {}, next_box);
+
+            if (side_name === "front") {
+                currentCompositorSource.photo_box = mergeDeep(currentCompositorSource.photo_box ?? {}, next_box);
+            }
+        }
+
+        function setCompositorTextFieldForSide(side_name, field_name, next_field) {
+            const side_source = ensureCompositorSideSource(side_name);
+            if (!side_source.text_fields || typeof side_source.text_fields !== "object") {
+                side_source.text_fields = {};
+            }
+
+            side_source.text_fields[field_name] = mergeDeep(side_source.text_fields[field_name] ?? {}, next_field);
+
+            if (side_name === "front") {
+                if (!currentCompositorSource.text_fields || typeof currentCompositorSource.text_fields !== "object") {
+                    currentCompositorSource.text_fields = {};
+                }
+
+                currentCompositorSource.text_fields[field_name] = mergeDeep(currentCompositorSource.text_fields[field_name] ?? {}, next_field);
+            }
+        }
+
+        function getCompositorScale() {
+            const frame_image = getElement("compositor_frame_image");
+            const natural_width = frame_image.naturalWidth || 1;
+            const rendered_width = frame_image.clientWidth || 1;
+            return rendered_width / natural_width;
+        }
+
+        function setCompositorBoxStyle(box_element, box) {
+            const scale = getCompositorScale();
+            box_element.style.left = `${(Number(box.x) || 0) * scale}px`;
+            box_element.style.top = `${(Number(box.y) || 0) * scale}px`;
+            box_element.style.width = `${(Number(box.width) || 0) * scale}px`;
+            box_element.style.height = `${(Number(box.height) || 0) * scale}px`;
+        }
+
+        function syncCompositorButtons() {
+            const front_button = getElement("compositor_side_front_button");
+            const back_button = getElement("compositor_side_back_button");
+            const is_front = currentCompositorSide === "front";
+
+            front_button.className = is_front
+                ? "rounded-2xl bg-slate-900 px-4 py-2 text-sm font-bold text-white"
+                : "rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700";
+
+            back_button.className = !is_front
+                ? "rounded-2xl bg-slate-900 px-4 py-2 text-sm font-bold text-white"
+                : "rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700";
+
+            getElement("compositor_frame_image").src = `frames/frame_01_${currentCompositorSide}.png`;
+        }
+
+        function syncCompositorBoxesToDom() {
+            const side_config = getCompositorSideConfig();
+
+            setCompositorBoxStyle(getElement("compositor_box_photo"), side_config.photo_box ?? {});
+            setCompositorBoxStyle(getElement("compositor_box_person_name"), side_config.text_fields?.person_name?.box ?? {});
+            setCompositorBoxStyle(getElement("compositor_box_artist_name"), side_config.text_fields?.artist_name?.box ?? {});
+            setCompositorBoxStyle(getElement("compositor_box_track_name"), side_config.text_fields?.track_name?.box ?? {});
+        }
+
+        function syncCompositorJsonTextarea() {
+            getElement("compositor_config_json").value = JSON.stringify(currentCompositorSource, null, 2);
+        }
+
+        function syncCompositorFormFields() {
+            const merged_config = getCompositorMergedConfig();
+            const side_config = getCompositorSideConfig();
+            const text_color = merged_config.text_color_rgb ?? {};
+
+            getElement("compositor_font_file_path").value = merged_config.font_file_path ?? "";
+            getElement("compositor_oversize_factor").value = String(side_config.photo_box?.oversize_factor ?? 1);
+            getElement("compositor_print_mode").value = merged_config.print_mode ?? "front_and_back";
+            getElement("compositor_text_color_r").value = String(text_color.r ?? 20);
+            getElement("compositor_text_color_g").value = String(text_color.g ?? 20);
+            getElement("compositor_text_color_b").value = String(text_color.b ?? 20);
+            getElement("compositor_back_first_print_enabled").checked = Boolean(merged_config.back_first_print_enabled);
+            getElement("compositor_compose_back_with_dynamic_content").checked = Boolean(merged_config.compose_back_with_dynamic_content);
+
+            getElement("compositor_max_person").value = String(side_config.text_fields?.person_name?.max_chars ?? 0);
+            getElement("compositor_size_person").value = String(side_config.text_fields?.person_name?.font_size ?? 0);
+            getElement("compositor_max_artist").value = String(side_config.text_fields?.artist_name?.max_chars ?? 0);
+            getElement("compositor_size_artist").value = String(side_config.text_fields?.artist_name?.font_size ?? 0);
+            getElement("compositor_max_track").value = String(side_config.text_fields?.track_name?.max_chars ?? 0);
+            getElement("compositor_size_track").value = String(side_config.text_fields?.track_name?.font_size ?? 0);
+
+            syncCompositorJsonTextarea();
+        }
+
+        function syncCompositorUi() {
+            syncCompositorButtons();
+            syncCompositorBoxesToDom();
+            syncCompositorFormFields();
+        }
+
+        function setTopLevelCompositorValue(key_name, next_value, fallback_value) {
+            const has_own_key = Object.prototype.hasOwnProperty.call(currentCompositorSource, key_name);
+            const next_json = JSON.stringify(next_value);
+            const fallback_json = JSON.stringify(fallback_value);
+
+            if (has_own_key || next_json !== fallback_json) {
+                currentCompositorSource[key_name] = deepClone(next_value);
+            }
+        }
+
+        function applyCompositorFieldInputsToSource(update_scope = "all") {
+            if (update_scope === "all" || update_scope === "top_level") {
+                const merged_config = getCompositorMergedConfig();
+                const next_text_color = {
+                    r: clampRgbValue(getNumberValue("compositor_text_color_r", 20)),
+                    g: clampRgbValue(getNumberValue("compositor_text_color_g", 20)),
+                    b: clampRgbValue(getNumberValue("compositor_text_color_b", 20))
+                };
+
+                setTopLevelCompositorValue("font_file_path", getElement("compositor_font_file_path").value ?? "", merged_config.font_file_path ?? "");
+                setTopLevelCompositorValue("print_mode", getElement("compositor_print_mode").value ?? "front_and_back", merged_config.print_mode ?? "front_and_back");
+                setTopLevelCompositorValue("back_first_print_enabled", Boolean(getElement("compositor_back_first_print_enabled").checked), Boolean(merged_config.back_first_print_enabled));
+                setTopLevelCompositorValue(
+                    "compose_back_with_dynamic_content",
+                    Boolean(getElement("compositor_compose_back_with_dynamic_content").checked),
+                    Boolean(merged_config.compose_back_with_dynamic_content)
+                );
+                setTopLevelCompositorValue("text_color_rgb", next_text_color, merged_config.text_color_rgb ?? next_text_color);
+            }
+
+            if (update_scope === "all" || update_scope === "photo_box") {
+                const current_side_config = getCompositorSideConfig();
+                setCompositorPhotoBoxForSide(currentCompositorSide, {
+                    ...(current_side_config.photo_box ?? {}),
+                    oversize_factor: Number(getElement("compositor_oversize_factor").value || current_side_config.photo_box?.oversize_factor || 1)
+                });
+            }
+
+            if (update_scope === "all" || update_scope === "text_fields") {
+                const current_side_config = getCompositorSideConfig();
+
+                setCompositorTextFieldForSide(currentCompositorSide, "person_name", {
+                    ...(current_side_config.text_fields?.person_name ?? {}),
+                    max_chars: getNumberValue("compositor_max_person", current_side_config.text_fields?.person_name?.max_chars ?? 0),
+                    font_size: getNumberValue("compositor_size_person", current_side_config.text_fields?.person_name?.font_size ?? 0)
+                });
+
+                setCompositorTextFieldForSide(currentCompositorSide, "artist_name", {
+                    ...(current_side_config.text_fields?.artist_name ?? {}),
+                    max_chars: getNumberValue("compositor_max_artist", current_side_config.text_fields?.artist_name?.max_chars ?? 0),
+                    font_size: getNumberValue("compositor_size_artist", current_side_config.text_fields?.artist_name?.font_size ?? 0)
+                });
+
+                setCompositorTextFieldForSide(currentCompositorSide, "track_name", {
+                    ...(current_side_config.text_fields?.track_name ?? {}),
+                    max_chars: getNumberValue("compositor_max_track", current_side_config.text_fields?.track_name?.max_chars ?? 0),
+                    font_size: getNumberValue("compositor_size_track", current_side_config.text_fields?.track_name?.font_size ?? 0)
+                });
+            }
+
+            syncCompositorJsonTextarea();
+        }
+
+        function attachCompositorDragAndResize(box_id, getter, setter) {
+            const box_element = getElement(box_id);
+            let dragging = false;
+            let resizing = false;
+            let start_x = 0;
+            let start_y = 0;
+            let start_box = null;
+
+            box_element.addEventListener("pointerdown", (event) => {
+                const handle_clicked = event.target?.classList?.contains("compositor_handle");
+                dragging = !handle_clicked;
+                resizing = Boolean(handle_clicked);
+                start_x = event.clientX;
+                start_y = event.clientY;
+                start_box = { ...getter() };
+                box_element.setPointerCapture(event.pointerId);
+                event.preventDefault();
+            });
+
+            box_element.addEventListener("pointermove", (event) => {
+                if (!dragging && !resizing) {
+                    return;
+                }
+
+                const scale = getCompositorScale();
+                const delta_x = (event.clientX - start_x) / scale;
+                const delta_y = (event.clientY - start_y) / scale;
+                const next_box = { ...start_box };
+
+                if (dragging) {
+                    next_box.x = Math.max(0, Math.round((start_box?.x ?? 0) + delta_x));
+                    next_box.y = Math.max(0, Math.round((start_box?.y ?? 0) + delta_y));
+                }
+
+                if (resizing) {
+                    next_box.width = Math.max(10, Math.round((start_box?.width ?? 0) + delta_x));
+                    next_box.height = Math.max(10, Math.round((start_box?.height ?? 0) + delta_y));
+                }
+
+                setter(next_box);
+                syncCompositorBoxesToDom();
+                syncCompositorFormFields();
+            });
+
+            box_element.addEventListener("pointerup", () => {
+                dragging = false;
+                resizing = false;
+                start_box = null;
+            });
+        }
+
+        function resetCompositorState(show_status_message = false) {
+            currentCompositorSource = deepClone(initialCompositorSourceState);
+            currentCompositorSide = "front";
+            syncCompositorUi();
+            getElement("compositor_save_status").textContent = show_status_message ? "Compositor recarregado do arquivo atual." : "";
+        }
+
+        async function saveCompositorConfig() {
+            const status_element = getElement("compositor_save_status");
+            status_element.textContent = "";
+
+            let parsed_payload = null;
+
+            try {
+                parsed_payload = JSON.parse(getElement("compositor_config_json").value || "{}");
+            } catch {
+                status_element.textContent = "JSON do compositor invÃ¡lido.";
+                return;
+            }
+
+            if (!parsed_payload || typeof parsed_payload !== "object" || Array.isArray(parsed_payload)) {
+                status_element.textContent = "O JSON do compositor precisa ser um objeto.";
+                return;
+            }
+
+            try {
+                const response = await fetch("admin/save_config.php", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify({
+                        compositor_config: parsed_payload
+                    })
+                });
+                const response_payload = await response.json();
+
+                if (!response.ok || !response_payload.ok) {
+                    throw new Error(response_payload.error || "Falha ao salvar compositor.");
+                }
+
+                const merged_source = mergeDeep(initialCompositorSourceState, parsed_payload);
+                initialCompositorSourceState = deepClone(merged_source);
+                currentCompositorSource = deepClone(merged_source);
+                syncCompositorUi();
+                status_element.textContent = "Compositor salvo sem descartar campos existentes do arquivo final.";
+                showToast("Compositor salvo com sucesso.", "success");
+            } catch (error) {
+                status_element.textContent = error.message || "Falha ao salvar compositor.";
+            }
+        }
+
+        async function generateCompositorPreview() {
+            const preview_error = getElement("compositor_preview_error");
+            const preview_image = getElement("compositor_preview_image");
+            const preview_file = getElement("compositor_preview_photo").files?.[0] ?? null;
+
+            preview_error.textContent = "";
+            preview_image.classList.add("hidden");
+            preview_image.removeAttribute("src");
+
+            if (!preview_file) {
+                preview_error.textContent = "Selecione uma foto para gerar o preview.";
+                return;
+            }
+
+            try {
+                const photo_data_url = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(String(reader.result));
+                    reader.onerror = () => reject(new Error("Falha ao ler a imagem."));
+                    reader.readAsDataURL(preview_file);
+                });
+
+                const response = await fetch("api/compose_image.php", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify({
+                        csrf_token: compositorPreviewCsrfToken,
+                        preview_only: true,
+                        person_name: getElement("compositor_preview_person").value ?? "",
+                        artist_name: getElement("compositor_preview_artist").value ?? "",
+                        track_name: getElement("compositor_preview_track").value ?? "",
+                        photo_data_url
+                    })
+                });
+                const response_payload = await response.json();
+
+                if (!response.ok || !response_payload.ok) {
+                    throw new Error(response_payload.error || "Falha ao gerar preview.");
+                }
+
+                preview_image.src = response_payload.final_image_data_url;
+                preview_image.classList.remove("hidden");
+            } catch (error) {
+                preview_error.textContent = error.message || "Falha ao gerar preview.";
+            }
+        }
+
+        function bindCompositorFieldInputs() {
+            [
+                "compositor_font_file_path",
+                "compositor_print_mode",
+                "compositor_text_color_r",
+                "compositor_text_color_g",
+                "compositor_text_color_b"
+            ].forEach((element_id) => {
+                getElement(element_id).addEventListener("input", () => {
+                    applyCompositorFieldInputsToSource("top_level");
+                });
+            });
+
+            [
+                "compositor_oversize_factor"
+            ].forEach((element_id) => {
+                getElement(element_id).addEventListener("input", () => {
+                    applyCompositorFieldInputsToSource("photo_box");
+                });
+            });
+
+            [
+                "compositor_max_person",
+                "compositor_size_person",
+                "compositor_max_artist",
+                "compositor_size_artist",
+                "compositor_max_track",
+                "compositor_size_track"
+            ].forEach((element_id) => {
+                getElement(element_id).addEventListener("input", () => {
+                    applyCompositorFieldInputsToSource("text_fields");
+                });
+            });
+
+            [
+                "compositor_back_first_print_enabled",
+                "compositor_compose_back_with_dynamic_content"
+            ].forEach((element_id) => {
+                getElement(element_id).addEventListener("change", () => {
+                    applyCompositorFieldInputsToSource("top_level");
+                });
+            });
+
+            getElement("compositor_side_front_button").addEventListener("click", () => {
+                currentCompositorSide = "front";
+                syncCompositorUi();
+            });
+
+            getElement("compositor_side_back_button").addEventListener("click", () => {
+                currentCompositorSide = "back";
+                syncCompositorUi();
+            });
+
+            getElement("compositor_frame_image").addEventListener("load", syncCompositorBoxesToDom);
+            window.addEventListener("resize", syncCompositorBoxesToDom);
+
+            getElement("compositor_reload_button").addEventListener("click", () => {
+                resetCompositorState(true);
+            });
+
+            getElement("compositor_save_button").addEventListener("click", saveCompositorConfig);
+            getElement("compositor_preview_button").addEventListener("click", generateCompositorPreview);
+        }
+
+        function bindCompositorStage() {
+            attachCompositorDragAndResize(
+                "compositor_box_photo",
+                () => ({ ...(getCompositorSideConfig().photo_box ?? {}) }),
+                (next_box) => {
+                    setCompositorPhotoBoxForSide(currentCompositorSide, next_box);
+                }
+            );
+
+            attachCompositorDragAndResize(
+                "compositor_box_person_name",
+                () => ({ ...(getCompositorSideTextField(currentCompositorSide, "person_name").box ?? {}) }),
+                (next_box) => {
+                    const current_field = getCompositorSideTextField(currentCompositorSide, "person_name");
+                    setCompositorTextFieldForSide(currentCompositorSide, "person_name", {
+                        ...current_field,
+                        box: next_box
+                    });
+                }
+            );
+
+            attachCompositorDragAndResize(
+                "compositor_box_artist_name",
+                () => ({ ...(getCompositorSideTextField(currentCompositorSide, "artist_name").box ?? {}) }),
+                (next_box) => {
+                    const current_field = getCompositorSideTextField(currentCompositorSide, "artist_name");
+                    setCompositorTextFieldForSide(currentCompositorSide, "artist_name", {
+                        ...current_field,
+                        box: next_box
+                    });
+                }
+            );
+
+            attachCompositorDragAndResize(
+                "compositor_box_track_name",
+                () => ({ ...(getCompositorSideTextField(currentCompositorSide, "track_name").box ?? {}) }),
+                (next_box) => {
+                    const current_field = getCompositorSideTextField(currentCompositorSide, "track_name");
+                    setCompositorTextFieldForSide(currentCompositorSide, "track_name", {
+                        ...current_field,
+                        box: next_box
+                    });
+                }
+            );
+        }
+
         function bindRealtimePreview() {
             document.addEventListener("input", () => {
                 refreshJsonPreview();
@@ -1473,6 +2240,9 @@ $printer_profiles = getPrinterProfiles();
                     deleteAsset(asset_key);
                 });
             });
+
+            bindCompositorStage();
+            bindCompositorFieldInputs();
         }
 
         document.addEventListener("DOMContentLoaded", () => {
@@ -1480,6 +2250,7 @@ $printer_profiles = getPrinterProfiles();
             bindRealtimePreview();
             refreshTemplateBatchSummary();
             refreshJsonPreview();
+            resetCompositorState(false);
             loadDashboard(false);
         });
     </script>

@@ -2,6 +2,9 @@
 declare(strict_types=1);
 
 header('X-Frame-Options: SAMEORIGIN');
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 /* English comments only */
 
@@ -144,22 +147,30 @@ function ensureConfigFileExists(): array
         $created = true;
     }
 
-    $raw_json = file_get_contents(HOTFOLDER_CONFIG_FILE_PATH);
-    if ($raw_json === false) {
-        throw new RuntimeException('Could not read config file.');
-    }
-
-    $decoded_json = json_decode($raw_json, true);
-    if (!is_array($decoded_json)) {
-        $decoded_json = [];
-    }
+    $decoded_json = readHotfolderConfigFile();
 
     $merged_config = deepMergeArrays($default_config, $decoded_json);
 
     return [
         'created' => $created,
         'data' => $merged_config,
+        'raw_data' => $decoded_json,
     ];
+}
+
+function readHotfolderConfigFile(): array
+{
+    if (!file_exists(HOTFOLDER_CONFIG_FILE_PATH)) {
+        return [];
+    }
+
+    $raw_json = file_get_contents(HOTFOLDER_CONFIG_FILE_PATH);
+    if ($raw_json === false) {
+        throw new RuntimeException('Could not read config file.');
+    }
+
+    $decoded_json = json_decode($raw_json, true);
+    return is_array($decoded_json) ? $decoded_json : [];
 }
 
 function writeConfigFile(array $config_payload): void
@@ -340,6 +351,13 @@ function assertRequestMethod(string $expected_method): void
 {
     if (strtoupper($_SERVER['REQUEST_METHOD'] ?? '') !== strtoupper($expected_method)) {
         throw new RuntimeException('Method not allowed.');
+    }
+}
+
+function assertAdminUnlocked(): void
+{
+    if (!(bool)($_SESSION['admin_unlocked'] ?? false)) {
+        throw new RuntimeException('Not authorized.');
     }
 }
 

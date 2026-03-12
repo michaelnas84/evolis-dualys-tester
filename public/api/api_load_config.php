@@ -7,6 +7,7 @@ require_once __DIR__ . '\\api_common.php';
 
 try {
     assertRequestMethod('GET');
+    assertAdminUnlocked();
 
     ensureHotfolderStructure();
     $config_result = ensureConfigFileExists();
@@ -14,6 +15,7 @@ try {
     respondJson(200, [
         'success' => true,
         'data' => $config_result['data'],
+        'raw_data' => $config_result['raw_data'],
         'status' => getHotfolderStatus(),
     ]);
 } catch (Throwable $throwable) {
