@@ -5,6 +5,21 @@ require_once __DIR__ . '/helpers.php';
 
 const HOTFOLDER_REPRINT_TIMEZONE = 'America/Sao_Paulo';
 
+function hotfolderReprintReadJsonFile(string $filePath): array
+{
+    if (!is_file($filePath)) {
+        return [];
+    }
+
+    $raw = @file_get_contents($filePath);
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
 function hotfolderReprintTimezone(): DateTimeZone
 {
     return new DateTimeZone(HOTFOLDER_REPRINT_TIMEZONE);
@@ -117,7 +132,7 @@ function hotfolderReprintListRecentJobs(array $config, int $limit = 30): array
                 continue;
             }
 
-            $manifest = safeJsonDecodeFile($manifestPath);
+            $manifest = hotfolderReprintReadJsonFile($manifestPath);
             $timestamps = hotfolderReprintFormatModifiedAt((int)$modifiedAt);
 
             $jobs[] = [
@@ -164,7 +179,7 @@ function hotfolderReprintLoadJob(array $config, string $status, string $jobId): 
     }
 
     $manifestPath = joinPath($realJobPath, 'manifest.json');
-    $manifest = safeJsonDecodeFile($manifestPath);
+    $manifest = hotfolderReprintReadJsonFile($manifestPath);
     if ($manifest === []) {
         throw new RuntimeException('Manifest not found or invalid.');
     }
