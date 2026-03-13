@@ -1,2 +1,14 @@
-storage/*.sqlite
-storage/composed/*.png
+# Runtime database files
+/storage/*.sqlite
+/storage/*.sqlite-*
+
+# Generated print/composition artifacts
+/storage/composed/
+/storage/print_jobs/
+/storage/reprint_validation/
+
+# Machine-local state and secrets
+/storage/admin_password_hash.txt
+/storage/compositor_config.json
+/storage/frame_state.json
+/card_hotfolder/config/app_config.json

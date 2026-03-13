@@ -348,24 +348,29 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     /* ── Kiosk input ── */
     .ki {
       width: 100%;
-      background: rgba(255, 255, 255, 0.96);
+      background: rgba(255, 255, 255, 0.76);
       border: 2.5px solid transparent;
       border-radius: 999px;
-      color: var(--brand-purple);
+      color: rgba(72, 17, 108, 0.72);
       font-size: 22px;
       font-weight: 700;
       padding: 6px 26px;
       outline: none;
       caret-color: transparent;
       cursor: pointer;
-      transition: border-color .2s, box-shadow .2s;
+      opacity: .62;
+      transition: border-color .2s, box-shadow .2s, background-color .2s, opacity .2s, color .2s;
       font-family: 'Segoe UI', system-ui, sans-serif;
-      box-shadow: 0 8px 24px rgba(72, 17, 108, 0.08);
+      box-shadow: none;
     }
 
     .ki.focused {
+      background: rgba(255, 255, 255, 0.98);
       border-color: rgba(255, 128, 200, .9);
       box-shadow: 0 0 0 4px rgba(255, 128, 200, .22);
+      color: var(--brand-purple);
+      caret-color: rgba(255, 128, 200, .95);
+      opacity: 1;
     }
 
     .ki::placeholder {
@@ -809,7 +814,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
     <p style="color:#fff;margin-top:16px;font-size:16px;letter-spacing:1px;">Processando foto...</p>
   </div>
 
-  <button id="flow_back_btn" type="button" style="position:fixed;top:24px;left:24px;z-index:10000;display:none;align-items:center;gap:10px;padding:12px 18px;border:none;border-radius:999px;background:rgba(34,7,56,.82);color:#fff;font-family:'Segoe UI',system-ui,sans-serif;font-size:15px;font-weight:700;letter-spacing:.4px;box-shadow:0 12px 28px rgba(0,0,0,.28);">
+  <button id="flow_back_btn" type="button" style="position:fixed;top:24px;left:24px;z-index:900;display:none;align-items:center;gap:10px;padding:12px 18px;border:none;border-radius:999px;background:rgba(34,7,56,.82);color:#fff;font-family:'Segoe UI',system-ui,sans-serif;font-size:15px;font-weight:700;letter-spacing:.4px;box-shadow:0 12px 28px rgba(0,0,0,.28);">
     <span style="font-size:18px;line-height:1;">&larr;</span>
     <span>VOLTAR</span>
   </button>
@@ -1405,7 +1410,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       const VKB_NUM = [
         ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
         ["-", "/", ":", ";", "(", ")", "$", "&", "@", '"'],
-        ["ABC", ".", ",", "?", "!", "'", "⌫"],
+        [".", ",", "?", "!", "'", "⌫"],
         ["ABC", "SPACE", "OK"],
       ];
 
@@ -1434,15 +1439,42 @@ $csrf_token = (string)$_SESSION['csrf_token'];
             } else {
               b.textContent = k;
             }
-            b.addEventListener("mousedown", e => e.preventDefault());
-            b.addEventListener("touchstart", e => e.preventDefault(), {
+            b.addEventListener("mousedown", e => {
+              e.preventDefault();
+              e.stopPropagation();
+            });
+            b.addEventListener("touchstart", e => {
+              e.preventDefault();
+              e.stopPropagation();
+            }, {
               passive: false
             });
-            b.addEventListener("click", () => vkbKey(k));
+            b.addEventListener("click", e => {
+              e.preventDefault();
+              e.stopPropagation();
+              vkbKey(k);
+            });
             rd.appendChild(b);
           });
           c.appendChild(rd);
         });
+      }
+
+      const form_inputs = [f_name, f_fandom, f_track];
+
+      function moveCaretToEnd(inp) {
+        if (!inp) return;
+        try {
+          inp.focus({
+            preventScroll: true
+          });
+        } catch (_) {
+          inp.focus();
+        }
+        try {
+          const pos = inp.value.length;
+          inp.setSelectionRange(pos, pos);
+        } catch (_) {}
       }
 
       function vkbKey(k) {
@@ -1464,32 +1496,41 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         if (k === "⌫") {
           active_inp.value = active_inp.value.slice(0, -1);
           active_inp.dispatchEvent(new Event("input"));
+          moveCaretToEnd(active_inp);
           return;
         }
         const ch = k === "SPACE" ? " " : k;
         if (active_inp.value.length < (active_inp.maxLength || 40)) {
           active_inp.value += ch;
           active_inp.dispatchEvent(new Event("input"));
+          moveCaretToEnd(active_inp);
         }
       }
 
       const VKB_H = 292;
 
       function openVkb(inp) {
+        form_inputs.forEach(field => field.classList.toggle("focused", field === inp));
         active_inp = inp;
-        inp.classList.add("focused");
         form_barea.style.opacity = "0";
         form_barea.style.pointerEvents = "none";
         vkb.classList.add("open");
         buildVkb();
+        moveCaretToEnd(inp);
         setTimeout(() => inp.scrollIntoView({
           block: "nearest",
           behavior: "smooth"
         }), 50);
+        setTimeout(() => moveCaretToEnd(inp), 60);
       }
 
       function closeVkb() {
-        if (active_inp) active_inp.classList.remove("focused");
+        form_inputs.forEach(field => field.classList.remove("focused"));
+        if (active_inp) {
+          try {
+            active_inp.blur();
+          } catch (_) {}
+        }
         active_inp = null;
         vkb.classList.remove("open");
         vkb_spacer.style.height = "0";
@@ -1497,7 +1538,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
         form_barea.style.pointerEvents = "all";
       }
 
-      [f_name, f_fandom, f_track].forEach(inp => {
+      form_inputs.forEach(inp => {
         inp.addEventListener("click", e => {
           e.stopPropagation();
           openVkb(inp);
@@ -1508,7 +1549,7 @@ $csrf_token = (string)$_SESSION['csrf_token'];
       document.addEventListener("click", e => {
         if (cur_screen !== "form") return;
         const inVkb = vkb.contains(e.target);
-        const inInput = [f_name, f_fandom, f_track].includes(e.target);
+        const inInput = form_inputs.includes(e.target);
         if (!inVkb && !inInput) closeVkb();
       });
 
