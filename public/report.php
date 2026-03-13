@@ -6,6 +6,7 @@ require __DIR__ . '/../src/database.php';
 
 const REPORT_TIMEZONE = 'America/Sao_Paulo';
 const HOTFOLDER_ROOT = 'C:\\card_hotfolder';
+const REPORT_MIN_DATE = '2026-03-12';
 
 function reportTimezone(): DateTimeZone
 {
@@ -22,6 +23,11 @@ function reportTodayString(): string
     return (new DateTimeImmutable('today', reportTimezone()))->format('Y-m-d');
 }
 
+function reportMinimumDateString(): string
+{
+    return REPORT_MIN_DATE;
+}
+
 function clampInt(mixed $value, int $min, int $max, int $fallback): int
 {
     if (!is_numeric($value)) {
@@ -31,10 +37,18 @@ function clampInt(mixed $value, int $min, int $max, int $fallback): int
     return max($min, min($max, (int)$value));
 }
 
-function normalizeReportDate(string $input, string $fallback, string $minimum): string
+function normalizeReportDate(string $input, string $fallback, string $minimum, string $maximum): string
 {
     $normalized = preg_match('/^\d{4}-\d{2}-\d{2}$/', $input) ? $input : $fallback;
-    return $normalized < $minimum ? $minimum : $normalized;
+    if ($normalized < $minimum) {
+        return $minimum;
+    }
+
+    if ($normalized > $maximum) {
+        return $maximum;
+    }
+
+    return $normalized;
 }
 
 function localDateTimeFromUtcString(string $utcDateTime): ?DateTimeImmutable
@@ -385,7 +399,7 @@ function buildReportPayload(string $dateFrom, string $dateTo, int $hourFrom, int
     $totalJobsTracked = $jobStatusCounts['in'] + $jobStatusCounts['done'] + $jobStatusCounts['error'];
 
     if ($totalParticipants === 0) {
-        $insights[] = 'Nenhuma ativacao encontrada no periodo selecionado a partir de hoje.';
+        $insights[] = 'Nenhuma ativacao encontrada no periodo selecionado.';
     } else {
         $insights[] = sprintf('Foram %d ativacoes no periodo filtrado.', $totalParticipants);
         if ($peakHour !== false && $peakHourValue > 0) {
@@ -471,8 +485,9 @@ function buildReportPayload(string $dateFrom, string $dateTo, int $hourFrom, int
 }
 
 $today = reportTodayString();
-$dateFrom = normalizeReportDate((string)($_GET['date_from'] ?? ''), $today, $today);
-$dateTo = normalizeReportDate((string)($_GET['date_to'] ?? ''), $dateFrom, $today);
+$minimumDate = reportMinimumDateString();
+$dateFrom = normalizeReportDate((string)($_GET['date_from'] ?? ''), $today, $minimumDate, $today);
+$dateTo = normalizeReportDate((string)($_GET['date_to'] ?? ''), $dateFrom, $minimumDate, $today);
 if ($dateTo < $dateFrom) {
     $dateTo = $dateFrom;
 }
@@ -640,12 +655,12 @@ if (($_GET['format'] ?? '') === 'json') {
                 <div class="grid grid-cols-1 gap-4 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
                     <label class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                         <div class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Data inicial</div>
-                        <input id="date_from" type="date" min="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>" class="mt-2 w-full bg-transparent text-base font-semibold outline-none" value="<?= htmlspecialchars($dateFrom, ENT_QUOTES, 'UTF-8') ?>">
+                        <input id="date_from" type="date" min="<?= htmlspecialchars($minimumDate, ENT_QUOTES, 'UTF-8') ?>" max="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>" class="mt-2 w-full bg-transparent text-base font-semibold outline-none" value="<?= htmlspecialchars($dateFrom, ENT_QUOTES, 'UTF-8') ?>">
                     </label>
 
                     <label class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                         <div class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Data final</div>
-                        <input id="date_to" type="date" min="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>" class="mt-2 w-full bg-transparent text-base font-semibold outline-none" value="<?= htmlspecialchars($dateTo, ENT_QUOTES, 'UTF-8') ?>">
+                        <input id="date_to" type="date" min="<?= htmlspecialchars($minimumDate, ENT_QUOTES, 'UTF-8') ?>" max="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>" class="mt-2 w-full bg-transparent text-base font-semibold outline-none" value="<?= htmlspecialchars($dateTo, ENT_QUOTES, 'UTF-8') ?>">
                     </label>
 
                     <label class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
