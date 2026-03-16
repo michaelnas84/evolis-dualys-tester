@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 require __DIR__ . '/../src/helpers.php';
@@ -338,29 +339,77 @@ function buildReportPayload(string $dateFrom, string $dateTo, int $hourFrom, int
         $heatmapRows[$dateKey] = array_fill(0, 24, 0);
     }
 
+    $hotfolderStatusCounts = ['in' => 0, 'done' => 0, 'error' => 0];
+    foreach ($hotfolderJobs as $job) {
+        $status = (string)($job['status'] ?? '');
+        if (isset($hotfolderStatusCounts[$status])) {
+            incrementCounter($hotfolderStatusCounts, $status);
+        }
+    }
+
+    $participantStatusCounts = ['in' => 0, 'done' => 0, 'error' => 0, 'not_found' => 0];
+    $reportParticipants = [];
+    $cleanupRows = [];
+
     foreach ($participants as $participant) {
+        $jobId = trim((string)($participant['job_id'] ?? ''));
+        $jobStatus = $jobId !== '' && isset($hotfolderJobs[$jobId]) ? (string)$hotfolderJobs[$jobId]['status'] : 'not_found';
+        if (isset($participantStatusCounts[$jobStatus])) {
+            incrementCounter($participantStatusCounts, $jobStatus);
+        }
+
+        if ($jobStatus === 'done') {
+            $reportParticipants[] = $participant + ['job_status' => $jobStatus];
+            continue;
+        }
+
+        $cleanupRows[] = [
+            'time' => (string)$participant['time_label'],
+            'date' => (string)$participant['date_label'],
+            'person_name' => (string)$participant['person_name'],
+            'cpf_formatted' => (string)$participant['cpf_formatted'],
+            'fandom' => (string)$participant['fandom'],
+            'track' => (string)$participant['track'],
+            'frame_name' => (string)$participant['frame_name'],
+            'print_mode' => (string)$participant['print_mode'],
+            'job_id' => $jobId,
+            'job_status' => $jobStatus,
+        ];
+    }
+
+    foreach ($reportParticipants as $participant) {
         incrementCounter($byDay, (string)$participant['date_key']);
         $hourKey = (int)$participant['hour_key'];
         $byHour[$hourKey]++;
         $heatmapRows[(string)$participant['date_key']][$hourKey]++;
     }
 
-    $jobStatusCounts = ['in' => 0, 'done' => 0, 'error' => 0, 'not_found' => 0];
-    foreach ($hotfolderJobs as $job) {
-        $status = (string)($job['status'] ?? '');
-        if (isset($jobStatusCounts[$status])) {
-            incrementCounter($jobStatusCounts, $status);
+    $activeHours = [];
+
+    foreach ($heatmapRows as $row) {
+        foreach ($row as $hour => $value) {
+            if ((int)$value > 0) {
+                $activeHours[(int)$hour] = true;
+            }
         }
     }
 
-    $recentRows = [];
-    foreach ($participants as $participant) {
-        $jobId = trim((string)($participant['job_id'] ?? ''));
-        $jobStatus = $jobId !== '' && isset($hotfolderJobs[$jobId]) ? (string)$hotfolderJobs[$jobId]['status'] : 'not_found';
-        if ($jobStatus === 'not_found') {
-            incrementCounter($jobStatusCounts, $jobStatus);
+    $visibleHeatmapHours = array_keys($activeHours);
+    sort($visibleHeatmapHours);
+
+    $filteredHeatmapValues = [];
+    foreach ($heatmapRows as $dateKey => $row) {
+        $filteredRow = [];
+
+        foreach ($visibleHeatmapHours as $hour) {
+            $filteredRow[] = (int)($row[$hour] ?? 0);
         }
 
+        $filteredHeatmapValues[] = $filteredRow;
+    }
+
+    $recentRows = [];
+    foreach ($reportParticipants as $participant) {
         $recentRows[] = [
             'time' => (string)$participant['time_label'],
             'date' => (string)$participant['date_label'],
@@ -369,8 +418,8 @@ function buildReportPayload(string $dateFrom, string $dateTo, int $hourFrom, int
             'track' => (string)$participant['track'],
             'frame_name' => (string)$participant['frame_name'],
             'print_mode' => (string)$participant['print_mode'],
-            'job_id' => $jobId,
-            'job_status' => $jobStatus,
+            'job_id' => (string)$participant['job_id'],
+            'job_status' => 'done',
         ];
     }
 
@@ -389,41 +438,35 @@ function buildReportPayload(string $dateFrom, string $dateTo, int $hourFrom, int
         }
     }
 
-    $frameCounts = countByValue($participants, 'frame_name');
-    $printModeCounts = countByValue($participants, 'print_mode');
-    $fandomCounts = countByValue($participants, 'fandom');
-    $trackCounts = countByValue($participants, 'track');
+    $frameCounts = countByValue($reportParticipants, 'frame_name');
+    $printModeCounts = countByValue($reportParticipants, 'print_mode');
+    $fandomCounts = countByValue($reportParticipants, 'fandom');
+    $trackCounts = countByValue($reportParticipants, 'track');
 
     $insights = [];
-    $totalParticipants = count($participants);
-    $totalJobsTracked = $jobStatusCounts['in'] + $jobStatusCounts['done'] + $jobStatusCounts['error'];
+    $totalParticipants = count($reportParticipants);
+    $cleanupCandidatesTotal = count($cleanupRows);
+    $totalParticipantsTracked = array_sum($participantStatusCounts);
 
     if ($totalParticipants === 0) {
-        $insights[] = 'Nenhuma ativacao encontrada no periodo selecionado.';
+        $insights[] = 'Nenhuma ativacao consolidada foi encontrada no periodo selecionado.';
     } else {
-        $insights[] = sprintf('Foram %d ativacoes no periodo filtrado.', $totalParticipants);
+        $insights[] = sprintf('O periodo analisado registrou %d ativacoes consolidadas.', $totalParticipants);
         if ($peakHour !== false && $peakHourValue > 0) {
-            $insights[] = sprintf('O pico ocorreu as %02dh com %d ativacoes.', (int)$peakHour, $peakHourValue);
+            $insights[] = sprintf('O maior volume ocorreu as %02dh, com %d ativacoes.', (int)$peakHour, $peakHourValue);
         }
         if (!empty($frameCounts)) {
             $topFrame = array_key_first($frameCounts);
-            $insights[] = sprintf('O frame mais usado foi %s.', (string)$topFrame);
+            $insights[] = sprintf('O frame com maior recorrencia foi %s.', (string)$topFrame);
         }
-    }
-    if ($duplicateCpfCount > 0) {
-        $insights[] = sprintf('Houve %d tentativas de CPF duplicado no periodo.', $duplicateCpfCount);
-    }
-    if ($jobStatusCounts['error'] > 0) {
-        $insights[] = sprintf('%d jobs estao na pasta de erro da hotfolder.', $jobStatusCounts['error']);
-    }
-    if ($jobStatusCounts['in'] > 0) {
-        $insights[] = sprintf('%d jobs ainda estao aguardando na pasta de entrada.', $jobStatusCounts['in']);
-    }
-    if ($totalJobsTracked > 0 && $jobStatusCounts['done'] > 0) {
-        $insights[] = sprintf(
-            'Taxa de jobs concluidos rastreados: %d%%.',
-            (int)round(($jobStatusCounts['done'] / max(1, $totalJobsTracked)) * 100)
-        );
+        if (!empty($fandomCounts)) {
+            $topFandom = array_key_first($fandomCounts);
+            $insights[] = sprintf('O fandom com maior participacao foi %s.', (string)$topFandom);
+        }
+        if (!empty($trackCounts)) {
+            $topTrack = array_key_first($trackCounts);
+            $insights[] = sprintf('A trilha mais recorrente entre as ativacoes foi %s.', (string)$topTrack);
+        }
     }
 
     return [
@@ -438,10 +481,11 @@ function buildReportPayload(string $dateFrom, string $dateTo, int $hourFrom, int
         'summary' => [
             'activations_total' => $totalParticipants,
             'duplicates_total' => $duplicateCpfCount,
-            'jobs_in_total' => $jobStatusCounts['in'],
-            'jobs_done_total' => $jobStatusCounts['done'],
-            'jobs_error_total' => $jobStatusCounts['error'],
-            'jobs_not_found_total' => $jobStatusCounts['not_found'],
+            'cleanup_candidates_total' => $cleanupCandidatesTotal,
+            'jobs_in_total' => $participantStatusCounts['in'],
+            'jobs_done_total' => $hotfolderStatusCounts['done'],
+            'jobs_error_total' => $participantStatusCounts['error'],
+            'jobs_not_found_total' => $participantStatusCounts['not_found'],
             'current_hour_activations' => $byHour[$currentHour] ?? 0,
             'previous_hour_activations' => $byHour[$previousHour] ?? 0,
             'peak_hour_label' => $peakHour !== false ? sprintf('%02d:00', (int)$peakHour) : '--:--',
@@ -464,21 +508,25 @@ function buildReportPayload(string $dateFrom, string $dateTo, int $hourFrom, int
             'top_fandoms' => topItems($fandomCounts, 8),
             'top_tracks' => topItems($trackCounts, 8),
             'job_status' => [
-                ['label' => 'Aguardando', 'value' => $jobStatusCounts['in']],
-                ['label' => 'Concluidos', 'value' => $jobStatusCounts['done']],
-                ['label' => 'Erro', 'value' => $jobStatusCounts['error']],
-                ['label' => 'Sem pasta', 'value' => $jobStatusCounts['not_found']],
+                ['label' => 'Consolidados', 'value' => $participantStatusCounts['done']],
+                ['label' => 'Aguardando', 'value' => $participantStatusCounts['in']],
+                ['label' => 'Erro', 'value' => $participantStatusCounts['error']],
+                ['label' => 'Sem correspondencia', 'value' => $participantStatusCounts['not_found']],
             ],
             'heatmap' => [
                 'days' => array_map(
                     static fn(string $dateKey): string => (new DateTimeImmutable($dateKey, reportTimezone()))->format('d/m'),
                     array_keys($heatmapRows)
                 ),
-                'hours' => array_map(static fn(int $hour): string => sprintf('%02d', $hour), range(0, 23)),
-                'values' => array_values($heatmapRows),
+                'hours' => array_map(
+                    static fn(int $hour): string => sprintf('%02d', $hour),
+                    $visibleHeatmapHours
+                ),
+                'values' => $filteredHeatmapValues,
             ],
         ],
         'recent_activations' => array_slice($recentRows, 0, 30),
+        'cleanup_candidates' => $cleanupRows,
         'recent_errors' => array_slice(array_reverse($hotfolderErrors), -20),
         'insights' => $insights,
     ];
@@ -509,15 +557,23 @@ if (($_GET['format'] ?? '') === 'json') {
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatorio de Ativacoes</title>
+    <title>Relatorio Analitico - Evento Vivo</title>
     <script src="js/tailwind.js"></script>
     <style>
         @keyframes floatIn {
-            from { opacity: 0; transform: translateY(16px) scale(0.99); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+            from {
+                opacity: 0;
+                transform: translateY(16px) scale(0.99);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
         }
 
         body {
@@ -590,7 +646,6 @@ if (($_GET['format'] ?? '') === 'json') {
 
         .heatmap-grid {
             display: grid;
-            grid-template-columns: 72px repeat(24, minmax(20px, 1fr));
             gap: 6px;
             align-items: center;
         }
@@ -626,19 +681,74 @@ if (($_GET['format'] ?? '') === 'json') {
             font-weight: 800;
             letter-spacing: 0.02em;
         }
+
+        .print-only {
+            display: none;
+        }
+
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 12mm;
+            }
+
+            body {
+                background: #ffffff !important;
+                color: #0f172a;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .print-only {
+                display: block !important;
+            }
+
+            .glass-panel {
+                background: #ffffff !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+            }
+
+            .shadow-panel {
+                box-shadow: none !important;
+            }
+
+            section,
+            header,
+            .glass-panel,
+            .card-enter {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                animation: none !important;
+            }
+
+            .rounded-\[2rem\],
+            .rounded-\[1\.7rem\],
+            .rounded-3xl,
+            .rounded-2xl {
+                border-radius: 18px !important;
+            }
+        }
     </style>
 </head>
+
 <body class="min-h-screen text-slate-800">
     <div class="mx-auto max-w-7xl px-4 py-8 lg:px-8">
         <header class="card-enter mb-6">
             <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-6 lg:p-8">
                 <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                     <div>
-                        <div class="pill bg-teal-100 text-teal-700">Relatorio operacional</div>
-                        <h1 class="mt-3 text-3xl font-black tracking-tight text-slate-900 lg:text-5xl">Ativacoes do dia e status da hotfolder</h1>
+                        <div class="pill bg-teal-100 text-teal-700">Relatorio analitico</div>
+                        <h1 class="mt-3 text-3xl font-black tracking-tight text-slate-900 lg:text-5xl">Evento Vivo</h1>
+                        <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Panorama consolidado das ativacoes registradas no periodo selecionado, com destaque para volume, comportamento horario e preferencias do publico.</p>
                     </div>
 
-                    <div class="flex flex-wrap gap-3">
+                    <div class="no-print flex flex-wrap gap-3">
+                        <button id="print_button" type="button" class="rounded-2xl bg-teal-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-teal-500">
+                            Imprimir / PDF
+                        </button>
                         <button id="refresh_button" type="button" class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800">
                             Atualizar agora
                         </button>
@@ -647,10 +757,25 @@ if (($_GET['format'] ?? '') === 'json') {
                         </a>
                     </div>
                 </div>
+
+                <div class="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3 hidden">
+                    <div class="rounded-3xl border border-slate-200 bg-white px-4 py-4">
+                        <div class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Periodo analisado</div>
+                        <div id="header_period" class="mt-2 text-lg font-black text-slate-900">--</div>
+                    </div>
+                    <div class="rounded-3xl border border-slate-200 bg-white px-4 py-4">
+                        <div class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Janela de horario</div>
+                        <div id="header_window" class="mt-2 text-lg font-black text-slate-900">--</div>
+                    </div>
+                    <div class="rounded-3xl border border-slate-200 bg-white px-4 py-4">
+                        <div class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Emissao do relatorio</div>
+                        <div id="header_generated_at" class="mt-2 text-lg font-black text-slate-900">--</div>
+                    </div>
+                </div>
             </div>
         </header>
 
-        <section class="card-enter mb-6">
+        <section class="card-enter mb-6 no-print">
             <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5">
                 <div class="grid grid-cols-1 gap-4 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
                     <label class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
@@ -692,7 +817,7 @@ if (($_GET['format'] ?? '') === 'json') {
                 <div class="flex items-center justify-between gap-3">
                     <div>
                         <h2 class="text-xl font-black text-slate-900">Tendencia por data</h2>
-                        <p class="mt-1 text-sm text-slate-500">Total de ativacoes agregadas por dia.</p>
+                        <p class="mt-1 text-sm text-slate-500">Volume diario de ativacoes consolidadas.</p>
                     </div>
                     <div class="pill bg-slate-100 text-slate-700">Data x volume</div>
                 </div>
@@ -702,10 +827,10 @@ if (($_GET['format'] ?? '') === 'json') {
             <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5">
                 <div class="flex items-center justify-between gap-3">
                     <div>
-                        <h2 class="text-xl font-black text-slate-900">Comparacoes rapidas</h2>
-                        <p class="mt-1 text-sm text-slate-500">Janela atual e leitura operacional.</p>
+                        <h2 class="text-xl font-black text-slate-900">Destaques do periodo</h2>
+                        <p class="mt-1 text-sm text-slate-500">Leitura sintetica do comportamento das ativacoes.</p>
                     </div>
-                    <div class="pill bg-amber-100 text-amber-700">Ao vivo</div>
+                    <div class="pill bg-amber-100 text-amber-700">Resumo</div>
                 </div>
                 <div id="comparison_cards" class="mt-5 grid grid-cols-1 gap-3"></div>
             </div>
@@ -716,20 +841,20 @@ if (($_GET['format'] ?? '') === 'json') {
                 <div class="flex items-center justify-between gap-3">
                     <div>
                         <h2 class="text-xl font-black text-slate-900">Ativacoes por hora</h2>
-                        <p class="mt-1 text-sm text-slate-500">Distribuicao local hora a hora.</p>
+                        <p class="mt-1 text-sm text-slate-500">Distribuicao local hora a hora das ativacoes consolidadas.</p>
                     </div>
                     <div class="pill bg-emerald-100 text-emerald-700">Hora</div>
                 </div>
                 <div id="chart_by_hour" class="mt-5"></div>
             </div>
 
-            <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5">
+            <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5 no-print">
                 <div class="flex items-center justify-between gap-3">
                     <div>
-                        <h2 class="text-xl font-black text-slate-900">Status dos jobs</h2>
-                        <p class="mt-1 text-sm text-slate-500">Pastas reais da hotfolder no periodo filtrado.</p>
+                        <h2 class="text-xl font-black text-slate-900">Status de consolidacao</h2>
+                        <p class="mt-1 text-sm text-slate-500">Painel interno para conferencia tecnica dos registros.</p>
                     </div>
-                    <div class="pill bg-rose-100 text-rose-700">Hotfolder</div>
+                    <div class="pill bg-rose-100 text-rose-700">Interno</div>
                 </div>
                 <div id="chart_job_status" class="mt-5 space-y-4"></div>
             </div>
@@ -753,7 +878,7 @@ if (($_GET['format'] ?? '') === 'json') {
             </div>
 
             <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5">
-                <h2 class="text-xl font-black text-slate-900">Modos de impressao</h2>
+                <h2 class="text-xl font-black text-slate-900">Formatos gerados</h2>
                 <div id="chart_print_modes" class="mt-5 space-y-4"></div>
             </div>
 
@@ -772,10 +897,10 @@ if (($_GET['format'] ?? '') === 'json') {
             <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5">
                 <div class="flex items-center justify-between gap-3">
                     <div>
-                        <h2 class="text-xl font-black text-slate-900">Ultimas ativacoes</h2>
-                        <p class="mt-1 text-sm text-slate-500">Leitura facil para operacao e atendimento.</p>
+                        <h2 class="text-xl font-black text-slate-900">Amostra de ativacoes</h2>
+                        <p class="mt-1 text-sm text-slate-500">Recorte recente das participacoes consolidadas no periodo.</p>
                     </div>
-                    <div class="pill bg-slate-100 text-slate-700">Historico</div>
+                    <div class="pill bg-slate-100 text-slate-700">Amostra</div>
                 </div>
                 <div class="mt-5 overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -786,7 +911,7 @@ if (($_GET['format'] ?? '') === 'json') {
                                 <th class="pb-3 pr-4 font-semibold">Fandom</th>
                                 <th class="pb-3 pr-4 font-semibold">Musica</th>
                                 <th class="pb-3 pr-4 font-semibold">Frame</th>
-                                <th class="pb-3 pr-4 font-semibold">Status</th>
+                                <th class="pb-3 pr-4 font-semibold">Formato</th>
                             </tr>
                         </thead>
                         <tbody id="recent_activations_body"></tbody>
@@ -796,14 +921,41 @@ if (($_GET['format'] ?? '') === 'json') {
 
             <div class="space-y-6">
                 <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5">
-                    <h2 class="text-xl font-black text-slate-900">Leituras importantes</h2>
+                    <h2 class="text-xl font-black text-slate-900">Insights do periodo</h2>
                     <div id="insights_list" class="mt-5 space-y-3"></div>
                 </div>
 
-                <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5">
-                    <h2 class="text-xl font-black text-slate-900">Erros recentes do processador</h2>
+                <div class="glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5 no-print">
+                    <h2 class="text-xl font-black text-slate-900">Ocorrencias tecnicas recentes</h2>
                     <div id="recent_errors_list" class="mt-5 space-y-3"></div>
                 </div>
+            </div>
+        </section>
+
+        <section class="mt-6 glass-panel shadow-panel rounded-[2rem] border border-white/70 p-5 no-print hidden">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-xl font-black text-slate-900">Registros complementares para conferencia</h2>
+                    <p class="mt-1 text-sm text-slate-500">Lista de apoio para validacao interna antes do fechamento definitivo.</p>
+                </div>
+                <div class="pill bg-amber-100 text-amber-700">Interno</div>
+            </div>
+            <div class="mt-5 overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="text-left text-slate-500">
+                        <tr>
+                            <th class="pb-3 pr-4 font-semibold">Hora</th>
+                            <th class="pb-3 pr-4 font-semibold">Nome</th>
+                            <th class="pb-3 pr-4 font-semibold">CPF</th>
+                            <th class="pb-3 pr-4 font-semibold">Fandom</th>
+                            <th class="pb-3 pr-4 font-semibold">Musica</th>
+                            <th class="pb-3 pr-4 font-semibold">Frame</th>
+                            <th class="pb-3 pr-4 font-semibold">Status</th>
+                            <th class="pb-3 pr-4 font-semibold">Job ID</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cleanup_candidates_body"></tbody>
+                </table>
             </div>
         </section>
     </div>
@@ -822,6 +974,7 @@ if (($_GET['format'] ?? '') === 'json') {
             if (!isoValue) return '--';
             const date = new Date(isoValue);
             return new Intl.DateTimeFormat('pt-BR', {
+                year: 'numeric',
                 day: '2-digit',
                 month: '2-digit',
                 hour: '2-digit',
@@ -829,8 +982,47 @@ if (($_GET['format'] ?? '') === 'json') {
             }).format(date);
         }
 
+        function formatShortDate(dateValue) {
+            if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return '--';
+            const [year, month, day] = dateValue.split('-');
+            return `${day}/${month}/${year}`;
+        }
+
+        function formatHourWindow(hourFrom, hourTo) {
+            const start = String(hourFrom ?? 0).padStart(2, '0');
+            const end = String(hourTo ?? 23).padStart(2, '0');
+            return `${start}:00 as ${end}:59`;
+        }
+
         function updateRefreshStatus(label) {
             getElement('refresh_status').textContent = label;
+        }
+
+        function updateReportMeta(report) {
+            const filters = report.filters || {};
+            getElement('header_period').textContent = `${formatShortDate(filters.date_from)} a ${formatShortDate(filters.date_to)}`;
+            getElement('header_window').textContent = formatHourWindow(filters.hour_from, filters.hour_to);
+            getElement('header_generated_at').textContent = formatIsoToLocal(report.generated_at);
+        }
+
+        function getJobStatusMeta(status) {
+            const statusClasses = {
+                done: 'bg-emerald-100 text-emerald-700',
+                in: 'bg-amber-100 text-amber-700',
+                error: 'bg-rose-100 text-rose-700',
+                not_found: 'bg-slate-100 text-slate-700'
+            };
+            const statusLabels = {
+                done: 'Concluido',
+                in: 'Aguardando',
+                error: 'Erro',
+                not_found: 'Sem correspondencia'
+            };
+
+            return {
+                className: statusClasses[status] || statusClasses.not_found,
+                label: statusLabels[status] || statusLabels.not_found,
+            };
         }
 
         function summaryCard(label, value, detail, tone) {
@@ -854,14 +1046,10 @@ if (($_GET['format'] ?? '') === 'json') {
         function renderSummary(report) {
             const summary = report.summary || {};
             getElement('summary_cards').innerHTML = [
-                summaryCard('Ativacoes', summary.activations_total, 'Total no periodo filtrado.', 'teal'),
-                summaryCard('CPF duplicado', summary.duplicates_total, 'Tentativas barradas pelo sistema.', 'amber'),
-                summaryCard('Jobs concluidos', summary.jobs_done_total, 'Pastas vistas em done.', 'emerald'),
-                summaryCard('Jobs com erro', summary.jobs_error_total, 'Pastas vistas em error.', 'rose'),
-                summaryCard('Fila atual', summary.jobs_in_total, 'Pastas ainda em in.', 'slate'),
-                summaryCard('Sem pasta', summary.jobs_not_found_total, 'Registro sem pasta encontrada no recorte.', 'slate'),
-                summaryCard('Hora atual', summary.current_hour_activations, 'Ativacoes na hora corrente.', 'teal'),
-                summaryCard('Hora de pico', summary.peak_hour_value, `Pico em ${summary.peak_hour_label || '--:--'}.`, 'emerald')
+                summaryCard('Ativacoes registradas', summary.activations_total, 'Total consolidado no periodo analisado.', 'teal'),
+                summaryCard('Registros consolidados', summary.jobs_done_total, 'Base validada para composicao do relatorio.', 'emerald'),
+                summaryCard('Hora de pico', summary.peak_hour_value, `Maior volume em ${summary.peak_hour_label || '--:--'}.`, 'amber'),
+                summaryCard('Janela mais recente', summary.current_hour_activations, 'Ativacoes registradas na ultima hora observada.', 'slate')
             ].join('');
         }
 
@@ -872,19 +1060,14 @@ if (($_GET['format'] ?? '') === 'json') {
 
             getElement('comparison_cards').innerHTML = [
                 {
-                    title: 'Hora atual x anterior',
-                    value: `${formatNumber(summary.current_hour_activations || 0)} / ${formatNumber(summary.previous_hour_activations || 0)}`,
-                    detail: deltaLabel
-                },
-                {
                     title: 'Maior concentracao',
                     value: summary.peak_hour_label || '--:--',
                     detail: `${formatNumber(summary.peak_hour_value || 0)} ativacoes no pico`
                 },
                 {
-                    title: 'Saude da fila',
-                    value: formatNumber((summary.jobs_in_total || 0) + (summary.jobs_error_total || 0)),
-                    detail: 'Pendencias ou problemas para olhar agora'
+                    title: 'Base consolidada',
+                    value: formatNumber(summary.jobs_done_total || 0),
+                    detail: 'Registros considerados na analise'
                 }
             ].map((item) => `
                 <div class="rounded-3xl border border-slate-200 bg-white p-4">
@@ -1003,7 +1186,11 @@ if (($_GET['format'] ?? '') === 'json') {
         }
 
         function renderHeatmap(report) {
-            const heatmap = report.charts?.heatmap || { days: [], hours: [], values: [] };
+            const heatmap = report.charts?.heatmap || {
+                days: [],
+                hours: [],
+                values: []
+            };
             const container = getElement('heatmap_chart');
             const flatValues = (heatmap.values || []).reduce((all, row) => all.concat(row || []), []).map((value) => Number(value || 0));
             const maxValue = Math.max(1, ...flatValues);
@@ -1030,7 +1217,17 @@ if (($_GET['format'] ?? '') === 'json') {
                 });
             });
 
-            container.innerHTML = `<div class="heatmap-grid min-w-[880px]">${cells.join('')}</div>`;
+            const hour_count = heatmap.hours.length;
+            const min_width = Math.max(320, 72 + (hour_count * 32));
+
+            container.innerHTML = `
+                <div
+                    class="heatmap-grid"
+                    style="grid-template-columns: 72px repeat(${hour_count}, minmax(20px, 1fr)); min-width:${min_width}px;"
+                >
+                    ${cells.join('')}
+                </div>
+            `;
         }
 
         function renderRecentActivations(report) {
@@ -1042,31 +1239,47 @@ if (($_GET['format'] ?? '') === 'json') {
                 return;
             }
 
-            const statusClasses = {
-                done: 'bg-emerald-100 text-emerald-700',
-                in: 'bg-amber-100 text-amber-700',
-                error: 'bg-rose-100 text-rose-700',
-                not_found: 'bg-slate-100 text-slate-700'
-            };
-            const statusLabels = {
-                done: 'Concluido',
-                in: 'Aguardando',
-                error: 'Erro',
-                not_found: 'Sem pasta'
-            };
-
-            body.innerHTML = rows.map((row) => `
+            body.innerHTML = rows.map((row) => {
+                const formatLabel = row.print_mode === 'front_and_back' ? 'Frente e verso' : 'Somente frente';
+                return `
                 <tr class="border-t border-slate-100">
                     <td class="py-3 pr-4 font-semibold text-slate-700">${row.date} ${row.time}</td>
                     <td class="py-3 pr-4 font-bold text-slate-900">${row.person_name}</td>
                     <td class="py-3 pr-4 text-slate-700">${row.fandom}</td>
                     <td class="py-3 pr-4 text-slate-700">${row.track}</td>
                     <td class="py-3 pr-4 text-slate-700">${row.frame_name}</td>
-                    <td class="py-3 pr-4">
-                        <span class="pill ${statusClasses[row.job_status] || statusClasses.not_found}">${statusLabels[row.job_status] || 'Sem pasta'}</span>
-                    </td>
+                    <td class="py-3 pr-4 text-slate-700">${formatLabel}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
+        }
+
+        function renderCleanupCandidates(report) {
+            const rows = report.cleanup_candidates || [];
+            const body = getElement('cleanup_candidates_body');
+
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="8" class="py-6 text-sm text-slate-500">Nenhum registro complementar neste filtro.</td></tr>';
+                return;
+            }
+
+            body.innerHTML = rows.map((row) => {
+                const meta = getJobStatusMeta(row.job_status);
+                return `
+                <tr class="border-t border-slate-100">
+                    <td class="py-3 pr-4 font-semibold text-slate-700">${row.date} ${row.time}</td>
+                    <td class="py-3 pr-4 font-bold text-slate-900">${row.person_name}</td>
+                    <td class="py-3 pr-4 text-slate-700">${row.cpf_formatted || '--'}</td>
+                    <td class="py-3 pr-4 text-slate-700">${row.fandom}</td>
+                    <td class="py-3 pr-4 text-slate-700">${row.track}</td>
+                    <td class="py-3 pr-4 text-slate-700">${row.frame_name}</td>
+                    <td class="py-3 pr-4">
+                        <span class="pill ${meta.className}">${meta.label}</span>
+                    </td>
+                    <td class="py-3 pr-4 font-mono text-xs text-slate-500">${row.job_id || '--'}</td>
+                </tr>
+            `;
+            }).join('');
         }
 
         function renderInsights(report) {
@@ -1080,7 +1293,7 @@ if (($_GET['format'] ?? '') === 'json') {
             const container = getElement('recent_errors_list');
 
             if (!items.length) {
-                container.innerHTML = '<div class="rounded-3xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500">Sem erros recentes na janela filtrada.</div>';
+                container.innerHTML = '<div class="rounded-3xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500">Sem ocorrencias tecnicas recentes na janela filtrada.</div>';
                 return;
             }
 
@@ -1096,6 +1309,7 @@ if (($_GET['format'] ?? '') === 'json') {
         }
 
         function renderReport(report) {
+            updateReportMeta(report);
             renderSummary(report);
             renderComparison(report);
             renderLineChart('chart_by_day', report.charts?.by_day?.labels || [], report.charts?.by_day?.values || []);
@@ -1107,6 +1321,7 @@ if (($_GET['format'] ?? '') === 'json') {
             renderRankedBars('chart_fandoms', report.charts?.top_fandoms || [], 'emerald');
             renderRankedBars('chart_tracks', report.charts?.top_tracks || [], 'rose');
             renderRecentActivations(report);
+            renderCleanupCandidates(report);
             renderInsights(report);
             renderErrors(report);
         }
@@ -1128,7 +1343,9 @@ if (($_GET['format'] ?? '') === 'json') {
 
             try {
                 const response = await fetch(`report.php?${params.toString()}`, {
-                    headers: { Accept: 'application/json' },
+                    headers: {
+                        Accept: 'application/json'
+                    },
                     cache: 'no-store'
                 });
                 const payload = await response.json();
@@ -1148,6 +1365,7 @@ if (($_GET['format'] ?? '') === 'json') {
             renderReport(initialReport);
             updateRefreshStatus(`Atualizado em ${formatIsoToLocal(initialReport.generated_at)}`);
 
+            getElement('print_button').addEventListener('click', () => window.print());
             getElement('apply_filters_button').addEventListener('click', () => loadReport(false));
             getElement('refresh_button').addEventListener('click', () => loadReport(false));
 
@@ -1161,4 +1379,5 @@ if (($_GET['format'] ?? '') === 'json') {
         });
     </script>
 </body>
+
 </html>
